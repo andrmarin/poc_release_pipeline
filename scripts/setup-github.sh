@@ -141,8 +141,13 @@ apply_ruleset "protect-main" '{
 # back to immutability only (no update/delete of released tags; creation stays
 # open) — the release workflow still refuses to reuse an existing tag, so a
 # stray manual tag fails the release loudly instead of being overwritten.
-# Both variants validate names: any new v* tag must match the release-version
-# regex, so malformed look-alikes (e.g. v2026.05.1111) are rejected.
+#
+# The include pattern matches EXACTLY the well-formed release shape
+# (vYYYY.MM.DD.NNNN, fnmatch classes): well-formed tags are immutable, while
+# malformed v* look-alikes fall outside the ruleset so the tag-police
+# workflow can auto-delete them on push. (Ruleset-level name validation via
+# tag_name_pattern requires GitHub Enterprise — rejected with HTTP 422 here.)
+tag_include='refs/tags/v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]'
 tag_ruleset_full='{
   "name": "protect-release-tags",
   "target": "tag",
@@ -150,16 +155,11 @@ tag_ruleset_full='{
   "bypass_actors": [
     { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
   ],
-  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "conditions": { "ref_name": { "include": ["'"$tag_include"'"], "exclude": [] } },
   "rules": [
     { "type": "creation" },
     { "type": "update" },
-    { "type": "deletion" },
-    { "type": "tag_name_pattern", "parameters": {
-        "name": "release version format",
-        "operator": "regex",
-        "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{4}$",
-        "negate": false } }
+    { "type": "deletion" }
   ]
 }'
 tag_ruleset_fallback='{
@@ -167,26 +167,22 @@ tag_ruleset_fallback='{
   "target": "tag",
   "enforcement": "active",
   "bypass_actors": [],
-  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "conditions": { "ref_name": { "include": ["'"$tag_include"'"], "exclude": [] } },
   "rules": [
     { "type": "update" },
-    { "type": "deletion" },
-    { "type": "tag_name_pattern", "parameters": {
-        "name": "release version format",
-        "operator": "regex",
-        "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{4}$",
-        "negate": false } }
+    { "type": "deletion" }
   ]
 }'
 if apply_ruleset "protect-release-tags" "$tag_ruleset_full" 2>/dev/null; then
-  tag_protection="full (creation/update/deletion blocked; workflow-only bypass; name regex)"
+  tag_protection="full (creation/update/deletion blocked; workflow-only bypass)"
 else
   warn "GitHub Actions app cannot be a bypass actor on a user-owned repo;"
-  warn "applying fallback tag ruleset: released v* tags are immutable and must"
-  warn "match the release-version regex, but creation stays open. Re-run after"
-  warn "moving the repo to an organization to get full tag lockdown."
+  warn "applying fallback tag ruleset: well-formed release tags are immutable,"
+  warn "creation stays open (malformed v* tags are auto-deleted by the"
+  warn "tag-police workflow). Re-run after moving the repo to an organization"
+  warn "to get full tag lockdown."
   apply_ruleset "protect-release-tags" "$tag_ruleset_fallback"
-  tag_protection="fallback (update/deletion blocked; creation open but name-validated — personal repo)"
+  tag_protection="fallback (well-formed tags immutable; malformed v* auto-deleted by tag police)"
 fi
 
 # ------------------------------------------------------------- environments

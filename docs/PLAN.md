@@ -54,7 +54,8 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 │   ├── dependabot.yml       # weekly bumps of the SHA-pinned actions
 │   └── workflows/
 │       ├── ci.yml           # PRs + pushes to main → development build + test
-│       └── release.yml      # manual, gated → staging artifact or production release
+│       ├── release.yml      # manual, gated → staging artifact or production release
+│       └── tag-police.yml   # auto-deletes malformed v* tags on push
 ├── docs/
 │   ├── HOW_TO_RELEASE.md    # click-by-click release guide (screenshots in docs/img/)
 │   ├── ISSUES.md            # log of issues faced and how each was solved
@@ -245,6 +246,15 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
      vs. wall clock and approval-wait split) to the run summary — GitHub's run-duration display
      is wall clock including approval wait and cannot be configured to exclude it.
 
+### 7.3 `tag-police.yml` — tag-name enforcement
+
+- **Trigger:** `push` of any `v*` tag.
+- Well-formed release tags (`^v[0-9]{4}[.][0-9]{2}[.][0-9]{2}[.][0-9]{4}$`) pass; anything else
+  is **deleted immediately** via the API and the run fails with a clear error pointing at the
+  release guide. Works because the tag ruleset's include pattern only covers well-formed names
+  (§8 item 4), leaving malformed look-alikes deletable.
+- Release-workflow tags trigger a (green) validation run — a free extra confirmation per release.
+
 ## 8. Repository setup & protections (automated by `scripts/setup-github.sh`)
 
 No manual GitHub UI actions. One bootstrap script applies everything in this section via the `gh`
@@ -297,9 +307,12 @@ Actions settings.
    (released tags are immutable, creation stays open). The publish job independently refuses to
    reuse an existing tag, so a stray manual tag fails the release loudly rather than being
    overwritten. Re-running the script after moving the repo to an organization converges to the
-   full lockdown. In **both** variants a `tag_name_pattern` rule validates any new `v*` tag
-   against the release-version regex `^v\d{4}\.\d{2}\.\d{2}\.\d{4}$`, so malformed look-alikes
-   (e.g. `v2026.05.1111`) are rejected even where creation is otherwise open.
+   full lockdown. **Name validation:** ruleset-level `tag_name_pattern` rules require GitHub
+   Enterprise (rejected with HTTP 422 here), so instead the ruleset's include pattern matches
+   exactly the well-formed shape via fnmatch classes (`refs/tags/v[0-9][0-9][0-9][0-9].[0-9][0-9]
+   .[0-9][0-9].[0-9][0-9][0-9][0-9]`) — only real release tags are immutable — and the
+   `tag-police` workflow (§7.3) auto-deletes malformed `v*` look-alikes (e.g. `v2026.05.1111`)
+   the moment they are pushed.
 5. **Environments:** create `staging` and `production`. `production` gets **required reviewers**
    (name at least two eligible approvers to cover absences, and enable **"prevent self-review"**
    so the person dispatching a release can never approve it themselves) and deployment-branch
@@ -333,10 +346,11 @@ The implementation is complete when all of the following are demonstrated
 - [x] The dispatcher of a production release cannot approve it themselves (prevent self-review).
       *(Verified before prevent-self-review was temporarily disabled for solo testing — re-enable
       by re-running `setup-github.sh` without `--allow-self-review` once the team is onboarded.)*
-- [ ] Manually updating or deleting a released `v*` tag is rejected by the tag ruleset. (On
-      org-owned repos manual *creation* is also rejected; on personal repos creation stays open
-      but the name must match the release-version regex — see §8 item 4 — and the publish job's
-      existing-tag check is the compensating control.)
+- [x] Manually updating or deleting a released `v*` tag is rejected by the tag ruleset
+      *(verified: deletion of `v2026.06.12.0006` rejected)*. (On org-owned repos manual
+      *creation* is also rejected; on personal repos creation stays open, but malformed `v*`
+      names are auto-deleted by the tag-police workflow — see §8 item 4 — and the publish job's
+      existing-tag check is the compensating control for well-formed ones.)
 - [x] Direct push to `main` is rejected.
 - [x] `scripts/build.sh` + `scripts/verify.sh` also run successfully on a local machine
       (documented in README).
