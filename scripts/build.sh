@@ -49,7 +49,13 @@ commit=$COMMIT
 workflow_run=$WORKFLOW_RUN
 EOF
 
-artifact="sample-app-${VERSION}-${ENVIRONMENT}.zip"
+# The version already carries an environment marker for staging (-staging)
+# and development (-dev+<sha>) builds; only append ENVIRONMENT when it does
+# not, to avoid names like "...-staging-staging.zip".
+case "$VERSION" in
+  *-staging|*-dev+*) artifact="sample-app-${VERSION}.zip" ;;
+  *)                 artifact="sample-app-${VERSION}-${ENVIRONMENT}.zip" ;;
+esac
 
 # zip is present on GitHub runners; fall back to Python locally (e.g. Git Bash).
 # Probe that the interpreter actually runs: on Windows, 'python3' can resolve

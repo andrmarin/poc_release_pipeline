@@ -72,7 +72,12 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 
 ### Artifact specification
 
-- Name: `sample-app-<version>-<environment>.zip` (e.g. `sample-app-v2026.06.12.45-production.zip`).
+- Name: `sample-app-<version>-<environment>.zip` (e.g. `sample-app-v2026.06.12.0045-production.zip`).
+  The environment suffix is omitted when the version already ends with an environment marker
+  (`-staging`, `-dev+<sha>`), avoiding names like `...-staging-staging.zip`.
+- The Actions **artifact container** uses the ZIP's base name (set from the built file, single
+  source of truth) — names are unique per run and sort chronologically, so downloads never
+  collide in a Downloads folder.
 - Contents: everything under `src/` **plus a generated `build.info`** at the ZIP root.
 - A `<artifact>.zip.sha256` checksum file is produced next to every ZIP and published with it.
 
