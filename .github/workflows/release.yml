@@ -76,7 +76,10 @@ jobs:
       - name: Compute version
         id: version
         run: |
-          version="v$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
+          # Run number is zero-padded: GitHub's Releases page orders entries by
+          # comparing tag names as strings, so fixed-width components are required
+          # to keep newest-on-top (v...13 would sort below v...9 otherwise).
+          version="v$(date -u +%Y.%m.%d).$(printf '%04d' "$GITHUB_RUN_NUMBER")"
           if [[ "${{ inputs.environment }}" == "staging" ]]; then
             version="${version}-staging"
           fi
