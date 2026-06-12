@@ -222,22 +222,43 @@ jobs:
       - name: Create draft release with assets
         id: draft
         run: |
-          release_id="$(gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
-            -f tag_name="$VERSION" \
-            -f target_commitish="$GITHUB_SHA" \
-            -f name="$VERSION" \
-            -F draft=true \
-            -F generate_release_notes=true \
-            --jq '.id')"
+          # GitHub intermittently rejects these calls with a spurious
+          # "403 Resource not accessible by integration" (observed twice on
+          # otherwise-identical runs) — retry with backoff before giving up.
+          release_id=""
+          for i in 1 2 3; do
+            if gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
+                 -f tag_name="$VERSION" \
+                 -f target_commitish="$GITHUB_SHA" \
+                 -f name="$VERSION" \
+                 -F draft=true \
+                 -F generate_release_notes=true \
+                 --jq '.id' > release_id.txt; then
+              release_id="$(cat release_id.txt)"
+              break
+            fi
+            echo "::warning::Draft creation attempt $i/3 failed — retrying in 10s."
+            sleep 10
+          done
+          [[ -n "$release_id" ]] || { echo "::error::Could not create the draft release after 3 attempts."; exit 1; }
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
           echo "Created draft release $VERSION (id $release_id)"
 
           for f in dist/*.zip dist/*.zip.sha256; do
-            echo "Uploading $(basename "$f")"
-            gh api -X POST \
-              -H "Content-Type: application/octet-stream" \
-              "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$(basename "$f")" \
-              --input "$f" >/dev/null
+            uploaded=false
+            for i in 1 2 3; do
+              if gh api -X POST \
+                   -H "Content-Type: application/octet-stream" \
+                   "https://uploads.github.com/repos/$GITHUB_REPOSITORY/releases/$release_id/assets?name=$(basename "$f")" \
+                   --input "$f" >/dev/null; then
+                uploaded=true
+                break
+              fi
+              echo "::warning::Upload of $(basename "$f") attempt $i/3 failed — retrying in 10s."
+              sleep 10
+            done
+            [[ "$uploaded" == "true" ]] || { echo "::error::Could not upload $(basename "$f") after 3 attempts."; exit 1; }
+            echo "Uploaded $(basename "$f")"
           done
 
       - name: Verify draft assets, then publish
