@@ -97,8 +97,10 @@ slow you down:
 Two related protections outside the branch ruleset:
 
 - **`protect-release-tags` ruleset:** released `v*` tags are immutable (no update, no
-  deletion) — a published version number must point at the same commit forever. On
-  org-owned repos tag *creation* is also restricted to the release workflow.
+  deletion) — a published version number must point at the same commit forever — and any
+  new `v*` tag name must match the release-version format (`vYYYY.MM.DD.NNNN`), so
+  malformed look-alikes like `v2026.05.1111` are rejected. On org-owned repos tag
+  *creation* is also restricted to the release workflow.
 - **Auto-delete merged branches:** the remote feature branch is removed on merge, so
   stale branches don't accumulate (note: this is why a hotfix must be *released before*
   its PR is merged).
