@@ -281,3 +281,27 @@ jobs:
           files=(published/*.zip)
           [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
           bash scripts/verify.sh "${files[0]}" production
+
+      # GitHub's run-duration display is wall clock INCLUDING approval wait and
+      # cannot be configured — so report the actual execution time ourselves.
+      - name: Report real pipeline duration
+        if: always()
+        run: |
+          exec_s="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?per_page=100" \
+            --jq '[.jobs[] | select(.started_at != null and .conclusion != "skipped")
+                   | (((.completed_at // (now | todate)) | fromdateiso8601) - (.started_at | fromdateiso8601))]
+                  | add | floor')"
+          wall_s="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+            --jq '(now - (.run_started_at | fromdateiso8601)) | floor')"
+          wait_s=$(( wall_s > exec_s ? wall_s - exec_s : 0 ))
+          fmt() { printf '%dm %02ds' $(($1 / 60)) $(($1 % 60)); }
+          echo "execution=$(fmt "$exec_s") wall=$(fmt "$wall_s") waiting=$(fmt "$wait_s")"
+          {
+            echo "### ⏱ Pipeline duration"
+            echo
+            echo "| Metric | Time |"
+            echo "|---|---|"
+            echo "| **Actual execution** (sum of job run times) | **$(fmt "$exec_s")** |"
+            echo "| Wall clock (what the Actions list shows) | $(fmt "$wall_s") |"
+            echo "| Waiting (approval gate + queueing) | $(fmt "$wait_s") |"
+          } >> "$GITHUB_STEP_SUMMARY"

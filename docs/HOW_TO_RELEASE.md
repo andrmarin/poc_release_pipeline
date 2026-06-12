@@ -105,6 +105,10 @@ with the ZIP + `.sha256` are created — fully automatically after the approval.
 > PRs merged while the run waits for approval are *not* included — dispatch a fresh run if you
 > want them.
 
+> **Note:** the duration shown in the Actions runs list is wall-clock time **including** the
+> wait for approval (GitHub cannot exclude it). The run's **Summary** page shows a
+> "Pipeline duration" table with the actual execution time.
+
 ### From the terminal
 
 ```sh
