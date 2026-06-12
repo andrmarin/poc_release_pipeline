@@ -238,13 +238,16 @@ gh api -X PUT "repos/$full/actions/permissions/workflow" --input - <<'JSON' >/de
 { "default_workflow_permissions": "read", "can_approve_pull_request_reviews": false }
 JSON
 
-# ------------------------------------------------------------ badges branch
-# The release workflow pushes self-hosted badge SVGs here; the README serves
-# them via raw.githubusercontent.com (no shields.io token-pool errors).
-if git ls-remote --exit-code origin refs/heads/badges >/dev/null 2>&1; then
-  info "Badges branch already exists"
+# --------------------------------------------------------------- badges tag
+# The release workflow force-updates this tag with self-hosted badge SVGs;
+# the README serves them via raw.githubusercontent.com (no shields.io
+# token-pool errors). A tag — not a branch — so badge pushes never trigger
+# GitHub's "had recent pushes" banner on the repo home page. Not matched by
+# the protect-release-tags ruleset (v* only).
+if git ls-remote --exit-code origin refs/tags/badges >/dev/null 2>&1; then
+  info "Badges tag already exists"
 else
-  info "Seeding 'badges' branch with placeholder badges"
+  info "Seeding 'badges' tag with placeholder badges"
   tmp="$(mktemp -d)"
   bash scripts/badge.sh staging unknown "#9f9f9f" > "$tmp/staging.svg"
   bash scripts/badge.sh production unknown "#9f9f9f" > "$tmp/production.svg"
@@ -254,8 +257,8 @@ else
       printf '100644 blob %s\t%s.svg\n' "$(git hash-object -w "$tmp/$f.svg")" "$f"
     done | git mktree
   )"
-  commit="$(git commit-tree "$tree" -m "Seed badges branch (placeholders until the first release)")"
-  git push origin "$commit:refs/heads/badges"
+  commit="$(git commit-tree "$tree" -m "Seed badges tag (placeholders until the first release)")"
+  git push origin "$commit:refs/tags/badges"
   rm -rf "$tmp"
 fi
 
