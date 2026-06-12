@@ -360,25 +360,34 @@ jobs:
           fi
           echo "update=true" >> "$GITHUB_OUTPUT"
 
-      - name: Push to badges branch
+      # The badges live on a force-updated TAG, not a branch: branch pushes
+      # trigger GitHub's "had recent pushes" banner on the repo home page,
+      # tag pushes don't. Each update is a parentless commit (no history
+      # growth); raw.githubusercontent.com serves tags exactly like branches.
+      - name: Push to badges tag
         if: steps.render.outputs.update == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin badges
-          git worktree add bw FETCH_HEAD
-          cp out/*.svg bw/
-          cd bw
-          git add .
-          if git diff --cached --quiet; then
-            echo "Badges already up to date."
-            exit 0
-          fi
-          git commit -q -m "badges: ${{ inputs.environment }} run #$GITHUB_RUN_NUMBER"
-          # Staging and production runs may race on this branch — retry with rebase.
+          # Staging and production runs may race on this ref — re-read,
+          # overlay, and push with a lease; retry on conflict.
           for i in 1 2 3; do
-            git push origin HEAD:badges && exit 0
-            git pull --rebase origin badges
+            git fetch origin refs/tags/badges
+            old="$(git rev-parse FETCH_HEAD)"
+            git worktree remove --force bw 2>/dev/null || true
+            git worktree add bw "$old" >/dev/null
+            cp out/*.svg bw/
+            tree="$(cd bw && git add -A . && git write-tree)"
+            if [[ "$tree" == "$(git rev-parse "$old^{tree}")" ]]; then
+              echo "Badges already up to date."
+              exit 0
+            fi
+            commit="$(git commit-tree "$tree" -m "badges: ${{ inputs.environment }} run #$GITHUB_RUN_NUMBER")"
+            if git push --force-with-lease=refs/tags/badges:"$old" origin "$commit:refs/tags/badges"; then
+              echo "Badges updated ($commit)."
+              exit 0
+            fi
+            echo "Lease conflict — retrying ($i/3)."
           done
           echo "::error::Failed to push badge update after 3 attempts."
           exit 1

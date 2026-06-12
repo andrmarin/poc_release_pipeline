@@ -5,7 +5,7 @@
 [![Production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
 [![Latest release](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases/latest)
 
-<sub>↑ &nbsp;**CI** – development build health on `main` &nbsp;·&nbsp; **staging** / **production** – outcome of each environment's most recent completed release &nbsp;·&nbsp; **latest release** – newest published version. Self-hosted badges rendered by the release workflow (`badges` branch); allow a few minutes of caching after a release.</sub>
+<sub>↑ &nbsp;**CI** – development build health on `main` &nbsp;·&nbsp; **staging** / **production** – outcome of each environment's most recent completed release &nbsp;·&nbsp; **latest release** – newest published version. Self-hosted badges rendered by the release workflow (`badges` tag); allow a few minutes of caching after a release.</sub>
 
 ## What is this?
 

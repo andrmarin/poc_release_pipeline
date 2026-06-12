@@ -219,9 +219,11 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   while any simulation variable is enabled.
 - **Badge job** (runs for both environments, also on failure): renders self-hosted SVG badges via
   `scripts/badge.sh` (environment status; latest-release version on successful production) and
-  pushes them to the unprotected `badges` branch with rebase-retry. The README serves them from
-  raw.githubusercontent.com — replacing shields.io's GitHub integrations, which intermittently
-  fail with "Unable to select next GitHub token from pool". Cancelled runs leave badges unchanged.
+  force-updates the `badges` **tag** (parentless commits, lease-protected retry against
+  staging/production races). The README serves them from raw.githubusercontent.com — replacing
+  shields.io's GitHub integrations, which intermittently fail with "Unable to select next GitHub
+  token from pool". A tag rather than a branch so badge pushes never trigger GitHub's "had recent
+  pushes" banner; not matched by the `v*` tag ruleset. Cancelled runs leave badges unchanged.
 - **Production path:**
   1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
      most recent production tag is not an ancestor of the commit being released — a prior hotfix
@@ -273,8 +275,9 @@ Actions settings.
      `--no-approval`, configure `production` with no required reviewers instead and warn loudly
      that releases will publish without human approval.
   6. Apply the Actions defaults (item 7) via the Actions permissions API.
-  7. Seed the unprotected `badges` branch with placeholder SVGs if missing — the release
-     workflow's badge job updates it on every run.
+  7. Seed the `badges` tag with placeholder SVGs if missing — the release workflow's badge job
+     force-updates it on every run (a tag, not a branch, so GitHub never shows a "had recent
+     pushes" banner for it).
   8. Print a summary of everything created, updated, or already compliant.
 
 ### Target configuration the script must apply
