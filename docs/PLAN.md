@@ -230,6 +230,9 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   4. **Post-publish verify job:** download the asset *from the published GitHub Release* (not from
      the workspace) and run `scripts/verify.sh` on it — proves the artifact users will download is
      valid, closing the loop end to end.
+  5. The post-publish verify job also writes the **actual execution time** (sum of job run times,
+     vs. wall clock and approval-wait split) to the run summary — GitHub's run-duration display
+     is wall clock including approval wait and cannot be configured to exclude it.
 
 ## 8. Repository setup & protections (automated by `scripts/setup-github.sh`)
 
