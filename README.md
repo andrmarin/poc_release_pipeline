@@ -225,3 +225,4 @@ team grows. Update [.github/CODEOWNERS](.github/CODEOWNERS) as reviewers join.
 
 - [docs/HOW_TO_RELEASE.md](docs/HOW_TO_RELEASE.md) — releasing, step by step, with screenshots
 - [docs/PLAN.md](docs/PLAN.md) — requirements, design decisions, and their rationale
+- [docs/ISSUES.md](docs/ISSUES.md) — log of issues faced and how each was solved

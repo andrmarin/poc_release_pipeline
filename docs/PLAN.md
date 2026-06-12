@@ -57,6 +57,7 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 │       └── release.yml      # manual, gated → staging artifact or production release
 ├── docs/
 │   ├── HOW_TO_RELEASE.md    # click-by-click release guide (screenshots in docs/img/)
+│   ├── ISSUES.md            # log of issues faced and how each was solved
 │   └── PLAN.md              # this document
 ├── scripts/
 │   ├── build.sh             # produces dist/<artifact>.zip (+ .sha256)
