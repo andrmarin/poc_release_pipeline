@@ -190,9 +190,13 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
      most recent production tag is not an ancestor of the commit being released — a prior hotfix
      shipped but was never merged forward and would regress. Skipped for `hotfix/*` dispatches.
-  2. Create tag `v<YYYY.MM.DD>.<run_number>` on the built commit via the workflow's `GITHUB_TOKEN`.
-  3. Create a GitHub Release for that tag with auto-generated release notes, attaching the ZIP and
-     the `.sha256` file. Mark as latest.
+  2. **Draft-first publish:** create a *draft* GitHub Release for `v<YYYY.MM.DD>.<run_number>`
+     (auto-generated notes) and upload the ZIP + `.sha256` to it. Drafts create no tag and are
+     not public, so a failed asset upload leaves nothing half-released; a failure handler deletes
+     the leftover draft automatically.
+  3. Verify both assets report state `uploaded`, then publish the draft and mark it latest — this
+     final, smallest step is what creates the tag on the built commit via the workflow's
+     `GITHUB_TOKEN`.
   4. **Post-release smoke job:** download the asset *from the published GitHub Release* (not from
      the workspace) and run `scripts/verify.sh` on it — proves the artifact users will download is
      valid, closing the loop end to end.

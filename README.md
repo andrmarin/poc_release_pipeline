@@ -27,9 +27,10 @@ squash-merge. Done; CI publishes the development artifact.
 
 **Production release:** `gh workflow run release.yml --ref main -f environment=production`.
 After a required reviewer approves the pending deployment, the workflow builds, verifies,
-creates the tag and the GitHub Release, then re-downloads the published asset and
-verifies it again (smoke test). If the latest production tag is not an ancestor of
-`main` (an unmerged hotfix), the release fails on purpose.
+uploads everything to a *draft* release (a failed upload creates no tag and the draft is
+auto-deleted), then publishes it — which creates the tag — and finally re-downloads the
+published asset and verifies it again (smoke test). If the latest production tag is not
+an ancestor of `main` (an unmerged hotfix), the release fails on purpose.
 
 **Hotfix (production broken, `main` has unreleased features):**
 
