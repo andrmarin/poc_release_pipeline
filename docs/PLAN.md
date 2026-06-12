@@ -108,10 +108,14 @@ Given a ZIP path and an expected environment, it must:
 ## 5. Versioning scheme
 
 - **Production:** `v<YYYY.MM.DD>.<run_number>` where the date is the UTC date and `run_number` is
-  the `release.yml` workflow run number (e.g. `v2026.06.12.45`). Monotonic and collision-free
-  without any stored state.
+  the `release.yml` workflow run number **zero-padded to 4 digits** (e.g. `v2026.06.12.0045`).
+  Monotonic and collision-free without any stored state. Padding is required because GitHub's
+  Releases page orders entries by string comparison of tag names — with fixed-width components,
+  string order equals chronological order, keeping the newest release on top. (Verified
+  empirically on 2026-06-12: unpadded `v2026.06.12.13` sorted below `v2026.06.12.9`.)
 - **Staging:** same scheme with a `-staging` suffix; **no tag is created**.
-- **Development:** `v<YYYY.MM.DD>.<ci_run_number>-dev+<short SHA>`; **no tag is created**.
+- **Development:** `v<YYYY.MM.DD>.<ci_run_number>-dev+<short SHA>` (run number padded the same
+  way); **no tag is created**.
 - **Hotfix releases** use the regular production scheme — the build number absorbs them with no
   special casing. Note: version order reflects release time, not code lineage (a hotfix version
   can be "newer" than a staging build that contains more features); `build.info`'s commit field

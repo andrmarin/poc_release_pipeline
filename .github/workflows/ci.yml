@@ -24,7 +24,8 @@ jobs:
         id: version
         run: |
           short_sha="${GITHUB_SHA::7}"
-          echo "version=v$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}-dev+${short_sha}" >> "$GITHUB_OUTPUT"
+          # Zero-padded run number, same convention as release.yml versions.
+          echo "version=v$(date -u +%Y.%m.%d).$(printf '%04d' "$GITHUB_RUN_NUMBER")-dev+${short_sha}" >> "$GITHUB_OUTPUT"
 
       - name: Build
         env:

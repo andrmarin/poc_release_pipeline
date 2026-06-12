@@ -18,7 +18,9 @@ Full requirements and rationale: [PLAN.md](docs/PLAN.md).
 
 Every ZIP contains `src/` plus a generated `build.info`
 (`environment`, `build_timestamp`, `version`, `commit`, `workflow_run`).
-Versions are computed, never typed: `v<YYYY.MM.DD>.<run_number>`
+Versions are computed, never typed: `v<YYYY.MM.DD>.<run_number>` with the run number
+zero-padded to 4 digits, e.g. `v2026.06.12.0045` — fixed-width components keep the
+Releases page (which sorts by tag-name string) in chronological order
 (`-staging` suffix for staging, `-dev+<sha>` for development).
 
 ## Day-to-day
@@ -39,7 +41,7 @@ an ancestor of `main` (an unmerged hotfix), the release fails on purpose.
 **Hotfix (production broken, `main` has unreleased features):**
 
 ```sh
-git switch -c hotfix/fix-thing v2026.06.12.45   # branch from the LAST PRODUCTION TAG
+git switch -c hotfix/fix-thing v2026.06.12.0045   # branch from the LAST PRODUCTION TAG
 # ...fix, push, open PR into main — this is the one review...
 gh workflow run release.yml --ref hotfix/fix-thing -f environment=production
 # after release: merge the same, already-approved PR into main (forward merge)
