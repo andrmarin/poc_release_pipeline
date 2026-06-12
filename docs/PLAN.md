@@ -204,7 +204,9 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   2. **Draft-first publish:** create a *draft* GitHub Release for `v<YYYY.MM.DD>.<run_number>`
      (auto-generated notes) and upload the ZIP + `.sha256` to it. Drafts create no tag and are
      not public, so a failed asset upload leaves nothing half-released; a failure handler deletes
-     the leftover draft automatically.
+     the leftover draft automatically. The draft's **release id is captured from the create
+     response** and passed between steps — never looked up by name afterwards (the list endpoint
+     failed to return a just-created draft in practice: "Draft release not found", 2026-06-12).
   3. Verify both assets report state `uploaded`, then publish the draft and mark it latest — this
      final, smallest step is what creates the tag on the built commit via the workflow's
      `GITHUB_TOKEN`.
