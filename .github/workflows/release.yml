@@ -183,7 +183,7 @@ jobs:
         run: |
           files=(dist/*.zip)
           [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
-          bash scripts/verify.sh "${files[0]}" "${{ inputs.environment }}"
+          bash scripts/build-verify.sh "${files[0]}" "${{ inputs.environment }}"
 
   publish:
     name: publish
@@ -290,7 +290,7 @@ jobs:
         run: |
           files=(published/*.zip)
           [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
-          bash scripts/verify.sh "${files[0]}" production
+          bash scripts/build-verify.sh "${files[0]}" production
 
       # GitHub's run-duration display is wall clock INCLUDING approval wait and
       # cannot be configured — so report the actual execution time ourselves.

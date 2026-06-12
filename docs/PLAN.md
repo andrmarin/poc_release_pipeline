@@ -60,7 +60,7 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 │   └── PLAN.md              # this document
 ├── scripts/
 │   ├── build.sh             # produces dist/<artifact>.zip (+ .sha256)
-│   ├── verify.sh            # unzips and validates an artifact
+│   ├── build-verify.sh            # unzips and validates an artifact
 │   └── setup-github.sh      # one-shot, idempotent GitHub bootstrap via gh (spec in §8)
 ├── src/                     # sample app payload; extra files ride along into the ZIP
 │   ├── abc-file-1.txt
@@ -102,7 +102,7 @@ added for traceability (any downloaded ZIP can be traced back to its exact commi
 - Validates `ENVIRONMENT` against the allowed list and fails loudly otherwise.
 - Generates `build.info`, stages `src/` + `build.info`, produces the ZIP and `.sha256` into `dist/`.
 
-### `scripts/verify.sh` requirements (the "test" stage)
+### `scripts/build-verify.sh` requirements (the "test" stage)
 
 Given a ZIP path and an expected environment, it must:
 
@@ -190,7 +190,7 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   1. `build` — checkout, compute the dev version, run `scripts/build.sh` with
      `ENVIRONMENT=development`, upload `dist/` as an Actions artifact (retention ~7 days).
   2. `test` — `needs: build`; **downloads the built artifact** (does not rebuild) and runs
-     `scripts/verify.sh` against it expecting `development`. Testing the actual artifact, not a
+     `scripts/build-verify.sh` against it expecting `development`. Testing the actual artifact, not a
      rebuild, is deliberate.
 - The combination of `build` + `test` is the required status check for merging PRs.
 
@@ -208,7 +208,7 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
 - **Build/test jobs:** set `environment: ${{ inputs.environment }}` on the job so GitHub's
   environment protection rules apply automatically (this is the human-error gate: production
   requires reviewer approval, staging does not). Compute the version per §5, build, then verify
-  with `scripts/verify.sh`.
+  with `scripts/build-verify.sh`.
 - **Staging path:** upload the verified ZIP + checksum as an Actions artifact with 30-day
   retention. Done — no tag, no release.
 - **Failure simulation:** repository variables following the `SIM_FAIL_<STAGE>` naming convention
@@ -233,7 +233,7 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
      final, smallest step is what creates the tag on the built commit via the workflow's
      `GITHUB_TOKEN`.
   4. **Post-publish verify job:** download the asset *from the published GitHub Release* (not from
-     the workspace) and run `scripts/verify.sh` on it — proves the artifact users will download is
+     the workspace) and run `scripts/build-verify.sh` on it — proves the artifact users will download is
      valid, closing the loop end to end.
   5. The post-publish verify job also writes the **actual execution time** (sum of job run times,
      vs. wall clock and approval-wait split) to the run summary — GitHub's run-duration display
@@ -247,8 +247,11 @@ Actions settings.
 
 ### Script requirements
 
-- **Inputs:** repo owner/name (defaults: authenticated user + current directory name) and the
-  production approver GitHub usernames (`--approvers user1,user2`).
+- **Inputs:** repo owner/name (defaults: authenticated user + current directory name), the
+  production approver GitHub usernames (`--approvers user1,user2`), `--allow-self-review`
+  (keep the gate but let the dispatcher approve their own release), and `--no-approval`
+  (disable the production approval gate entirely — no required reviewers; re-running without
+  the flag restores the gate).
 - **Idempotent:** safe to re-run at any time — finds existing rulesets/environments by name and
   updates them, creates what is missing. A second run against a fully configured repo changes
   nothing and says so.
@@ -262,7 +265,9 @@ Actions settings.
   4. Create/update the branch ruleset (item 2) and the tag ruleset (item 4) via the rulesets API.
   5. Create/update the `staging` and `production` environments (item 5), resolving approver
      usernames to user IDs; enable prevent-self-review on `production`. If the only approver is
-     the authenticated user, warn that self-dispatched production releases will block.
+     the authenticated user, warn that self-dispatched production releases will block. With
+     `--no-approval`, configure `production` with no required reviewers instead and warn loudly
+     that releases will publish without human approval.
   6. Apply the Actions defaults (item 7) via the Actions permissions API.
   7. Print a summary of everything created, updated, or already compliant.
 
@@ -300,7 +305,7 @@ Actions settings.
 The implementation is complete when all of the following are demonstrated
 (✅ = verified live on 2026-06-12):
 
-- [ ] A PR with a failing `verify.sh` check cannot be merged; a green PR can. *(Green half
+- [ ] A PR with a failing `build-verify.sh` check cannot be merged; a green PR can. *(Green half
       verified many times; the failing-PR drill has not been run yet.)*
 - [x] Merging to `main` produces a development artifact whose `build.info` says
       `environment=development` and contains a valid UTC timestamp, version, commit SHA, and run URL.
@@ -308,7 +313,7 @@ The implementation is complete when all of the following are demonstrated
       `environment=staging`, with **no** tag and **no** GitHub Release created.
 - [x] Dispatching `release.yml` with `production` pauses for reviewer approval, then creates tag
       `v<date>.<run>`, and a GitHub Release with the ZIP and `.sha256` attached.
-- [x] The post-publish verify job downloads the released asset and `verify.sh` passes on it.
+- [x] The post-publish verify job downloads the released asset and `build-verify.sh` passes on it.
 - [ ] Hotfix drill: a `hotfix/*` branch cut from the latest production tag, with one reviewed PR
       into `main`, releases to production **without** any unreleased `main` features in the ZIP;
       the same PR then merges forward into `main`.
@@ -321,7 +326,7 @@ The implementation is complete when all of the following are demonstrated
       org-owned repos manual *creation* is also rejected; on personal repos creation stays open —
       see §8 item 4 — and the publish job's existing-tag check is the compensating control.)
 - [x] Direct push to `main` is rejected.
-- [x] `scripts/build.sh` + `scripts/verify.sh` also run successfully on a local machine
+- [x] `scripts/build.sh` + `scripts/build-verify.sh` also run successfully on a local machine
       (documented in README).
 - [x] `scripts/setup-github.sh` takes a fresh local repo to a fully configured public GitHub repo
       (rulesets, environments, Actions settings) with zero manual UI actions; a second run
