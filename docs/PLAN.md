@@ -123,6 +123,12 @@ Given a ZIP path and an expected environment, it must:
 - A re-run of a release workflow attempt keeps the same run number; if the tag already exists the
   workflow must **fail with a clear error** rather than overwrite anything (intentional idempotency
   guard — re-releasing the same version requires a fresh run).
+- **Monotonic version guard** (build job, both environments): the computed version must sort
+  strictly above the newest existing `v*` tag, otherwise the run fails. This closes the same-day
+  stale re-run loophole: run numbers are frozen per run, so re-running an old failed run after
+  newer releases shipped would otherwise produce a *lower* version — for production it would even
+  be marked Latest. Caveat: re-runs execute their original workflow snapshot, so the guard only
+  protects runs created after it was introduced (2026-06-12).
 
 ## 6. Branching & release strategy
 
