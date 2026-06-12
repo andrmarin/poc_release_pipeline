@@ -234,9 +234,14 @@ Actions settings.
    conflict. If the repo's plan supports merge queue, enable it and re-enable strict up-to-date.
 3. **Merge methods:** allow **squash-merge only** (disable merge commits and rebase merges).
    Linear history makes rolling back a whole feature a single `git revert`.
-4. **Tag ruleset on `v*`:** block creation, update, and deletion by everyone except repo admins —
-   tags come only from the release workflow (the workflow's `GITHUB_TOKEN` push must remain
-   allowed; verify this during implementation and document the working configuration).
+4. **Tag ruleset on `v*`:** preferred configuration blocks creation, update, and deletion for
+   everyone, with a bypass for the GitHub Actions app so only the release workflow can create
+   tags. **Verified during implementation:** that bypass actor is only accepted on org-owned
+   repos; on a personal repo the script automatically falls back to blocking update/deletion only
+   (released tags are immutable, creation stays open). The publish job independently refuses to
+   reuse an existing tag, so a stray manual tag fails the release loudly rather than being
+   overwritten. Re-running the script after moving the repo to an organization converges to the
+   full lockdown.
 5. **Environments:** create `staging` and `production`. `production` gets **required reviewers**
    (name at least two eligible approvers to cover absences, and enable **"prevent self-review"**
    so the person dispatching a release can never approve it themselves) and deployment-branch
@@ -266,7 +271,9 @@ The implementation is complete when all of the following are demonstrated:
 - [ ] While a shipped hotfix PR is still unmerged, a regular production release from `main` fails
       on the unmerged-hotfix guard; after merging, it succeeds.
 - [ ] The dispatcher of a production release cannot approve it themselves (prevent self-review).
-- [ ] Manually pushing a `v*` tag is rejected by the tag ruleset.
+- [ ] Manually updating or deleting a released `v*` tag is rejected by the tag ruleset. (On
+      org-owned repos manual *creation* is also rejected; on personal repos creation stays open —
+      see §8 item 4 — and the publish job's existing-tag check is the compensating control.)
 - [ ] Direct push to `main` is rejected.
 - [ ] `scripts/build.sh` + `scripts/verify.sh` also run successfully on a local machine
       (documented in README).

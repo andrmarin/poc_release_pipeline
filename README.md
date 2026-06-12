@@ -57,7 +57,8 @@ scripts/setup-github.sh --approvers user1,user2
 
 Creates the public repo (if missing), pushes `main`, and converges: squash-only merges,
 branch ruleset (PR + approval + codeowner review + `build`/`test` checks, no force-push),
-tag ruleset (`v*` creatable only by the release workflow), `staging`/`production`
+tag ruleset (released `v*` tags immutable; on org-owned repos creation is also restricted
+to the release workflow), `staging`/`production`
 environments (deployments from `main` + `hotfix/*`, production approvers with
 prevent-self-review), and read-only default Actions permissions. Idempotent — re-run anytime.
 

@@ -84,9 +84,13 @@ gh repo edit "$full" \
   --delete-branch-on-merge=true >/dev/null
 
 # ----------------------------------------------------------------- rulesets
+ruleset_id() {
+  gh api "repos/$full/rulesets" --jq ".[] | select(.name==\"$1\") | .id" | head -n 1
+}
+
 apply_ruleset() {
   local name="$1" json="$2" id
-  id="$(gh api "repos/$full/rulesets" --jq ".[] | select(.name==\"$name\") | .id" | head -n 1)"
+  id="$(ruleset_id "$name")"
   if [[ -n "$id" ]]; then
     info "Ruleset '$name' exists (id $id) — converging"
     gh api -X PUT "repos/$full/rulesets/$id" --input - <<<"$json" >/dev/null
@@ -125,9 +129,13 @@ apply_ruleset "protect-main" '{
   ]
 }'
 
-# Only the GitHub Actions app (Integration id 15368) may create v* tags —
-# i.e. the release workflow. Humans, including admins, are blocked.
-apply_ruleset "protect-release-tags" '{
+# Preferred: only the GitHub Actions app (Integration id 15368) may create
+# v* tags — i.e. the release workflow; humans, including admins, are blocked.
+# That bypass actor is only valid on ORG-owned repos. On personal repos, fall
+# back to immutability only (no update/delete of released tags; creation stays
+# open) — the release workflow still refuses to reuse an existing tag, so a
+# stray manual tag fails the release loudly instead of being overwritten.
+tag_ruleset_full='{
   "name": "protect-release-tags",
   "target": "tag",
   "enforcement": "active",
@@ -141,6 +149,27 @@ apply_ruleset "protect-release-tags" '{
     { "type": "deletion" }
   ]
 }'
+tag_ruleset_fallback='{
+  "name": "protect-release-tags",
+  "target": "tag",
+  "enforcement": "active",
+  "bypass_actors": [],
+  "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
+  "rules": [
+    { "type": "update" },
+    { "type": "deletion" }
+  ]
+}'
+if apply_ruleset "protect-release-tags" "$tag_ruleset_full" 2>/dev/null; then
+  tag_protection="full (creation/update/deletion blocked; workflow-only bypass)"
+else
+  warn "GitHub Actions app cannot be a bypass actor on a user-owned repo;"
+  warn "applying fallback tag ruleset: released v* tags are immutable, but tag"
+  warn "creation stays open. Re-run after moving the repo to an organization"
+  warn "to get full tag lockdown."
+  apply_ruleset "protect-release-tags" "$tag_ruleset_fallback"
+  tag_protection="fallback (update/deletion blocked; creation open — personal repo)"
+fi
 
 # ------------------------------------------------------------- environments
 ensure_branch_policy() {
@@ -201,7 +230,7 @@ Bootstrap complete for https://github.com/$full
   - ruleset 'protect-main': PR + 1 approval + codeowner review + checks
     (build, test); no force-push/deletion; linear history;
     admin bypass via PR only (remove once team is onboarded)
-  - ruleset 'protect-release-tags': v* tags only via the release workflow
+  - ruleset 'protect-release-tags': $tag_protection
   - environment 'staging': deployments from main + hotfix/*
   - environment 'production': required reviewers ($APPROVERS),
     prevent_self_review=$PREVENT_SELF_REVIEW, deployments from main + hotfix/*
