@@ -1,0 +1,4 @@
+This file represents the application payload of the sample project.
+
+It exists so the release ZIP has real content to carry through the pipeline:
+build -> test -> (staging | production release).

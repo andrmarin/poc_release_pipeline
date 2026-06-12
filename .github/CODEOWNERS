@@ -1,0 +1,4 @@
+# Pipeline changes are the highest-blast-radius changes in this repo:
+# route them to designated reviewers. Add teammates as the team onboards.
+/.github/ @andrmarin
+/scripts/ @andrmarin

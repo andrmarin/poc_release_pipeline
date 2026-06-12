@@ -1,0 +1,159 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+
+permissions:
+  contents: read
+
+# Never cancel a running release; a second dispatch queues behind it.
+concurrency:
+  group: release-${{ inputs.environment }}
+  cancel-in-progress: false
+
+jobs:
+  guard:
+    name: guard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require main or hotfix/* branch
+        run: |
+          case "$GITHUB_REF" in
+            refs/heads/main|refs/heads/hotfix/*)
+              echo "Dispatched from $GITHUB_REF — ok" ;;
+            *)
+              echo "::error::Releases must be dispatched from 'main' or a 'hotfix/*' branch, got '$GITHUB_REF'"
+              exit 1 ;;
+          esac
+
+  build:
+    name: build
+    needs: guard
+    runs-on: ubuntu-latest
+    # The environment gate: 'production' requires reviewer approval before
+    # this job (and everything after it) runs.
+    environment: ${{ inputs.environment }}
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+        with:
+          fetch-depth: 0 # full history + tags, needed for the unmerged-hotfix guard
+
+      - name: Unmerged-hotfix guard
+        if: inputs.environment == 'production' && github.ref == 'refs/heads/main'
+        run: |
+          last_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -v -- '-staging' | head -n 1 || true)"
+          if [[ -n "$last_tag" ]] && ! git merge-base --is-ancestor "$last_tag" HEAD; then
+            echo "::error::Latest production tag '$last_tag' is not an ancestor of main." \
+                 "A hotfix was released but never merged forward — releasing now would regress it." \
+                 "Merge the hotfix PR into main first."
+            exit 1
+          fi
+          echo "ok: ${last_tag:-no previous production tag} is an ancestor of HEAD"
+
+      - name: Compute version
+        id: version
+        run: |
+          version="v$(date -u +%Y.%m.%d).${GITHUB_RUN_NUMBER}"
+          if [[ "${{ inputs.environment }}" == "staging" ]]; then
+            version="${version}-staging"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        env:
+          ENVIRONMENT: ${{ inputs.environment }}
+          VERSION: ${{ steps.version.outputs.version }}
+          COMMIT: ${{ github.sha }}
+          WORKFLOW_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash scripts/build.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sample-app-${{ inputs.environment }}
+          path: dist/*
+          retention-days: ${{ inputs.environment == 'staging' && 30 || 1 }}
+          if-no-files-found: error
+
+  test:
+    name: test
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Download built artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sample-app-${{ inputs.environment }}
+          path: dist
+
+      - name: Verify artifact
+        run: |
+          files=(dist/*.zip)
+          [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
+          bash scripts/verify.sh "${files[0]}" "${{ inputs.environment }}"
+
+  publish:
+    name: publish
+    if: inputs.environment == 'production'
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the tag + GitHub Release
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Refuse to overwrite an existing tag
+        run: |
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
+            echo "::error::Tag $VERSION already exists — refusing to overwrite. Dispatch a fresh release run."
+            exit 1
+          fi
+
+      - name: Download built artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: sample-app-production
+          path: dist
+
+      - name: Create tag + GitHub Release
+        run: |
+          gh release create "$VERSION" dist/*.zip dist/*.zip.sha256 \
+            --target "$GITHUB_SHA" \
+            --title "$VERSION" \
+            --generate-notes \
+            --latest
+
+  smoke:
+    name: smoke
+    if: inputs.environment == 'production'
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5.0.1
+
+      - name: Download asset from the published release
+        run: gh release download "$VERSION" --dir smoke
+
+      - name: Verify released asset
+        run: |
+          files=(smoke/*.zip)
+          [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
+          bash scripts/verify.sh "${files[0]}" production

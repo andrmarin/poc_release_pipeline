@@ -1,0 +1,4 @@
+Release notes placeholder for the sample application.
+
+The real desktop application will replace the contents of src/ entirely;
+the pipeline around it (workflows, scripts, protections) is the deliverable.
