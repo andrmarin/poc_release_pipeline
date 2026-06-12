@@ -238,6 +238,27 @@ gh api -X PUT "repos/$full/actions/permissions/workflow" --input - <<'JSON' >/de
 { "default_workflow_permissions": "read", "can_approve_pull_request_reviews": false }
 JSON
 
+# ------------------------------------------------------------ badges branch
+# The release workflow pushes self-hosted badge SVGs here; the README serves
+# them via raw.githubusercontent.com (no shields.io token-pool errors).
+if git ls-remote --exit-code origin refs/heads/badges >/dev/null 2>&1; then
+  info "Badges branch already exists"
+else
+  info "Seeding 'badges' branch with placeholder badges"
+  tmp="$(mktemp -d)"
+  bash scripts/badge.sh staging unknown "#9f9f9f" > "$tmp/staging.svg"
+  bash scripts/badge.sh production unknown "#9f9f9f" > "$tmp/production.svg"
+  bash scripts/badge.sh "latest release" none "#9f9f9f" > "$tmp/latest-release.svg"
+  tree="$(
+    for f in staging production latest-release; do
+      printf '100644 blob %s\t%s.svg\n' "$(git hash-object -w "$tmp/$f.svg")" "$f"
+    done | git mktree
+  )"
+  commit="$(git commit-tree "$tree" -m "Seed badges branch (placeholders until the first release)")"
+  git push origin "$commit:refs/heads/badges"
+  rm -rf "$tmp"
+fi
+
 # ------------------------------------------------------------------ summary
 cat <<EOF
 

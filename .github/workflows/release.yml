@@ -315,3 +315,70 @@ jobs:
             echo "| Wall clock (what the Actions list shows) | $(fmt "$wall_s") |"
             echo "| Waiting (approval gate + queueing) | $(fmt "$wait_s") |"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  # Self-hosted README badges: rendered here and pushed to the unprotected
+  # 'badges' branch (seeded by setup-github.sh), served via
+  # raw.githubusercontent.com. Replaces shields.io's GitHub integrations,
+  # which intermittently fail with "Unable to select next GitHub token from
+  # pool".
+  badge:
+    name: badge
+    if: always() && needs.build.result != 'skipped' && needs.build.result != 'cancelled'
+    needs: [build, test, publish, post-publish-verify]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # push badge updates to the badges branch
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Render badges
+        id: render
+        run: |
+          env_name="${{ inputs.environment }}"
+          test_r="${{ needs.test.result }}"
+          pub_r="${{ needs.publish.result }}"
+          ppv_r="${{ needs['post-publish-verify'].result }}"
+          if [[ "$test_r" == "cancelled" || "$pub_r" == "cancelled" || "$ppv_r" == "cancelled" ]]; then
+            echo "update=false" >> "$GITHUB_OUTPUT"
+            echo "Run was cancelled — leaving badges unchanged."
+            exit 0
+          fi
+          mkdir -p out
+          if [[ "$env_name" == "staging" ]]; then
+            [[ "$test_r" == "success" ]] && status=passing || status=failing
+          else
+            [[ "$pub_r" == "success" && "$ppv_r" == "success" ]] && status=passing || status=failing
+          fi
+          color="#4c1"; [[ "$status" == "failing" ]] && color="#e05d44"
+          bash scripts/badge.sh "$env_name" "$status" "$color" > "out/$env_name.svg"
+          echo "rendered $env_name: $status"
+          if [[ "$env_name" == "production" && "$status" == "passing" ]]; then
+            bash scripts/badge.sh "latest release" "$VERSION" "#007ec6" > out/latest-release.svg
+            echo "rendered latest release: $VERSION"
+          fi
+          echo "update=true" >> "$GITHUB_OUTPUT"
+
+      - name: Push to badges branch
+        if: steps.render.outputs.update == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin badges
+          git worktree add bw FETCH_HEAD
+          cp out/*.svg bw/
+          cd bw
+          git add .
+          if git diff --cached --quiet; then
+            echo "Badges already up to date."
+            exit 0
+          fi
+          git commit -q -m "badges: ${{ inputs.environment }} run #$GITHUB_RUN_NUMBER"
+          # Staging and production runs may race on this branch — retry with rebase.
+          for i in 1 2 3; do
+            git push origin HEAD:badges && exit 0
+            git pull --rebase origin badges
+          done
+          echo "::error::Failed to push badge update after 3 attempts."
+          exit 1
