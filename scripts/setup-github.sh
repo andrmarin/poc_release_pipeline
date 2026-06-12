@@ -141,6 +141,8 @@ apply_ruleset "protect-main" '{
 # back to immutability only (no update/delete of released tags; creation stays
 # open) — the release workflow still refuses to reuse an existing tag, so a
 # stray manual tag fails the release loudly instead of being overwritten.
+# Both variants validate names: any new v* tag must match the release-version
+# regex, so malformed look-alikes (e.g. v2026.05.1111) are rejected.
 tag_ruleset_full='{
   "name": "protect-release-tags",
   "target": "tag",
@@ -152,7 +154,12 @@ tag_ruleset_full='{
   "rules": [
     { "type": "creation" },
     { "type": "update" },
-    { "type": "deletion" }
+    { "type": "deletion" },
+    { "type": "tag_name_pattern", "parameters": {
+        "name": "release version format",
+        "operator": "regex",
+        "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{4}$",
+        "negate": false } }
   ]
 }'
 tag_ruleset_fallback='{
@@ -163,18 +170,23 @@ tag_ruleset_fallback='{
   "conditions": { "ref_name": { "include": ["refs/tags/v*"], "exclude": [] } },
   "rules": [
     { "type": "update" },
-    { "type": "deletion" }
+    { "type": "deletion" },
+    { "type": "tag_name_pattern", "parameters": {
+        "name": "release version format",
+        "operator": "regex",
+        "pattern": "^v\\d{4}\\.\\d{2}\\.\\d{2}\\.\\d{4}$",
+        "negate": false } }
   ]
 }'
 if apply_ruleset "protect-release-tags" "$tag_ruleset_full" 2>/dev/null; then
-  tag_protection="full (creation/update/deletion blocked; workflow-only bypass)"
+  tag_protection="full (creation/update/deletion blocked; workflow-only bypass; name regex)"
 else
   warn "GitHub Actions app cannot be a bypass actor on a user-owned repo;"
-  warn "applying fallback tag ruleset: released v* tags are immutable, but tag"
-  warn "creation stays open. Re-run after moving the repo to an organization"
-  warn "to get full tag lockdown."
+  warn "applying fallback tag ruleset: released v* tags are immutable and must"
+  warn "match the release-version regex, but creation stays open. Re-run after"
+  warn "moving the repo to an organization to get full tag lockdown."
   apply_ruleset "protect-release-tags" "$tag_ruleset_fallback"
-  tag_protection="fallback (update/deletion blocked; creation open — personal repo)"
+  tag_protection="fallback (update/deletion blocked; creation open but name-validated — personal repo)"
 fi
 
 # ------------------------------------------------------------- environments

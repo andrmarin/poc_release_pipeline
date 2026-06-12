@@ -297,7 +297,9 @@ Actions settings.
    (released tags are immutable, creation stays open). The publish job independently refuses to
    reuse an existing tag, so a stray manual tag fails the release loudly rather than being
    overwritten. Re-running the script after moving the repo to an organization converges to the
-   full lockdown.
+   full lockdown. In **both** variants a `tag_name_pattern` rule validates any new `v*` tag
+   against the release-version regex `^v\d{4}\.\d{2}\.\d{2}\.\d{4}$`, so malformed look-alikes
+   (e.g. `v2026.05.1111`) are rejected even where creation is otherwise open.
 5. **Environments:** create `staging` and `production`. `production` gets **required reviewers**
    (name at least two eligible approvers to cover absences, and enable **"prevent self-review"**
    so the person dispatching a release can never approve it themselves) and deployment-branch
@@ -332,8 +334,9 @@ The implementation is complete when all of the following are demonstrated
       *(Verified before prevent-self-review was temporarily disabled for solo testing — re-enable
       by re-running `setup-github.sh` without `--allow-self-review` once the team is onboarded.)*
 - [ ] Manually updating or deleting a released `v*` tag is rejected by the tag ruleset. (On
-      org-owned repos manual *creation* is also rejected; on personal repos creation stays open —
-      see §8 item 4 — and the publish job's existing-tag check is the compensating control.)
+      org-owned repos manual *creation* is also rejected; on personal repos creation stays open
+      but the name must match the release-version regex — see §8 item 4 — and the publish job's
+      existing-tag check is the compensating control.)
 - [x] Direct push to `main` is rejected.
 - [x] `scripts/build.sh` + `scripts/verify.sh` also run successfully on a local machine
       (documented in README).
