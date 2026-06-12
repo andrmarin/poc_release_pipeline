@@ -49,9 +49,10 @@ public release, and needs no approval.
    `guard` → `build` → `test`. (`publish` and `post-publish verify` stay skipped —
    they are production-only.)
 
-5. Your build is at the **bottom of the run page**, in the **Artifacts** section:
-   `sample-app-staging`. Click it to download a ZIP containing the build and its
-   checksum. It is kept for 30 days.
+5. Your build is at the **bottom of the run page**, in the **Artifacts** section, named
+   after its version — e.g. `sample-app-v2026.06.12.0045-staging` (names are unique per
+   run and sort chronologically in your Downloads folder). Click it to download a ZIP
+   containing the build and its checksum. It is kept for 30 days.
 
    > 📸 **Screenshot placeholder** — *run page scrolled to the Artifacts section with `sample-app-staging` visible.*
    > <!-- ![Staging artifact](img/release-04-staging-artifact.png) -->
