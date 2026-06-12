@@ -60,6 +60,7 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 │   ├── ISSUES.md            # log of issues faced and how each was solved
 │   └── PLAN.md              # this document
 ├── scripts/
+│   ├── badge.sh             # renders self-hosted status badge SVGs (README badges)
 │   ├── build.sh             # produces dist/<artifact>.zip (+ .sha256)
 │   ├── verify.sh            # unzips and validates an artifact
 │   └── setup-github.sh      # one-shot, idempotent GitHub bootstrap via gh (spec in §8)
@@ -216,6 +217,11 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   `SIM_FAIL_UPLOAD` switches the upload step's `path` to a deliberately empty location so the
   upload step itself fails; `dist/` is untouched). The guard job refuses production dispatches
   while any simulation variable is enabled.
+- **Badge job** (runs for both environments, also on failure): renders self-hosted SVG badges via
+  `scripts/badge.sh` (environment status; latest-release version on successful production) and
+  pushes them to the unprotected `badges` branch with rebase-retry. The README serves them from
+  raw.githubusercontent.com — replacing shields.io's GitHub integrations, which intermittently
+  fail with "Unable to select next GitHub token from pool". Cancelled runs leave badges unchanged.
 - **Production path:**
   1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
      most recent production tag is not an ancestor of the commit being released — a prior hotfix
@@ -267,7 +273,9 @@ Actions settings.
      `--no-approval`, configure `production` with no required reviewers instead and warn loudly
      that releases will publish without human approval.
   6. Apply the Actions defaults (item 7) via the Actions permissions API.
-  7. Print a summary of everything created, updated, or already compliant.
+  7. Seed the unprotected `badges` branch with placeholder SVGs if missing — the release
+     workflow's badge job updates it on every run.
+  8. Print a summary of everything created, updated, or already compliant.
 
 ### Target configuration the script must apply
 

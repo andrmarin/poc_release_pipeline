@@ -1,11 +1,11 @@
 # PoC Release Pipeline
 
 [![CI](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml?query=branch%3Amain)
-[![Staging](https://img.shields.io/github/deployments/andrmarin/poc_release_pipeline/staging?label=staging)](https://github.com/andrmarin/poc_release_pipeline/deployments)
-[![Production](https://img.shields.io/github/deployments/andrmarin/poc_release_pipeline/production?label=production)](https://github.com/andrmarin/poc_release_pipeline/deployments)
-[![Latest release](https://img.shields.io/github/v/release/andrmarin/poc_release_pipeline?label=latest%20release)](https://github.com/andrmarin/poc_release_pipeline/releases/latest)
+[![Staging](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/staging.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![Production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![Latest release](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases/latest)
 
-<sub>↑ &nbsp;**CI** – development build health on `main` &nbsp;·&nbsp; **staging** / **production** – each environment's most recent release (*pending* = awaiting reviewer approval) &nbsp;·&nbsp; **latest release** – newest published version</sub>
+<sub>↑ &nbsp;**CI** – development build health on `main` &nbsp;·&nbsp; **staging** / **production** – outcome of each environment's most recent completed release &nbsp;·&nbsp; **latest release** – newest published version. Self-hosted badges rendered by the release workflow (`badges` branch); allow a few minutes of caching after a release.</sub>
 
 ## What is this?
 
