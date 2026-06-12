@@ -108,7 +108,7 @@ gh pr merge --squash --delete-branch
 git switch main
 git pull origin main
 
-# 7. Release to staging (no approval needed) and watch it
+# 7. (Optional) Release to staging (no approval needed) and watch it
 gh workflow run release.yml --ref main -f environment=staging
 sleep 10 && gh run watch "$(gh run list --workflow=release.yml --limit 1 \
   --json databaseId --jq '.[0].databaseId')"
