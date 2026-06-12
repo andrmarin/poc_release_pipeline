@@ -76,6 +76,33 @@ run number zero-padded to 4 digits, e.g. `v2026.06.12.0045`. Staging builds get 
 
 Direct pushes to `main` are blocked for everyone; everything goes through a PR.
 
+## Branch rules: what is enforced, and why
+
+`main` is protected by the `protect-main` ruleset (applied automatically by
+[scripts/setup-github.sh](scripts/setup-github.sh); full rationale in
+[docs/PLAN.md](docs/PLAN.md) §8). The rules exist to make human error hard, not to
+slow you down:
+
+| Rule | What it does | Why |
+|---|---|---|
+| Pull request required | direct pushes to `main` are rejected, for everyone | every change gets CI and a second pair of eyes before it can ship |
+| 1 approving review | a PR needs a teammate's approval (you cannot approve your own) | review is evidence, not ceremony — someone else looked |
+| Code-owner review | changes under `.github/` and `scripts/` need approval from [CODEOWNERS](.github/CODEOWNERS) | pipeline changes have the highest blast radius in the repo |
+| Required checks: `build`, `test` | a PR cannot merge while CI is red | `main` stays releasable at every commit |
+| Squash-merge only + linear history | each PR lands as exactly one commit, no merge commits | rolling back a whole feature is a single `git revert`; history reads like a changelog |
+| No force-pushes | history on `main` is append-only | released tags and `build.info` commit references can never point at rewritten history |
+| No branch deletion | `main` cannot be deleted | even by accident, even by admins |
+| Admin bypass (PR-only) | an admin may merge a PR without the requirements above, but still **cannot** push directly | solo-phase escape hatch — remove it from the ruleset once the team grows |
+
+Two related protections outside the branch ruleset:
+
+- **`protect-release-tags` ruleset:** released `v*` tags are immutable (no update, no
+  deletion) — a published version number must point at the same commit forever. On
+  org-owned repos tag *creation* is also restricted to the release workflow.
+- **Auto-delete merged branches:** the remote feature branch is removed on merge, so
+  stale branches don't accumulate (note: this is why a hotfix must be *released before*
+  its PR is merged).
+
 ## Terminal cheat sheet: branch → PR → merge → release
 
 The whole journey from a fresh branch to a production release, console-only:
