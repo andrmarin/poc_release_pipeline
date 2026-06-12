@@ -228,8 +228,8 @@ jobs:
             echo "No leftover draft to clean up."
           fi
 
-  smoke:
-    name: smoke
+  post-publish-verify:
+    name: post-publish verify
     if: inputs.environment == 'production'
     needs: [build, publish]
     runs-on: ubuntu-latest
@@ -240,10 +240,10 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Download asset from the published release
-        run: gh release download "$VERSION" --dir smoke
+        run: gh release download "$VERSION" --dir published
 
       - name: Verify released asset
         run: |
-          files=(smoke/*.zip)
+          files=(published/*.zip)
           [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
           bash scripts/verify.sh "${files[0]}" production
