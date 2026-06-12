@@ -64,7 +64,7 @@ Currently implemented:
 
 | Variable | Effect when `true` |
 |---|---|
-| `SIM_FAIL_UPLOAD` | the "Upload artifact" step itself reads a deliberately empty path (`SIM_FAIL_UPLOAD-is-armed/*`) and fails; `dist/` and all prior steps are untouched |
+| `SIM_FAIL_UPLOAD` | the "Upload artifact" step itself reads a deliberately empty path (`SIM_FAIL_UPLOAD-is-armed/*`) and fails |
 
 ```sh
 gh variable set SIM_FAIL_UPLOAD --body true    # arm the drill
