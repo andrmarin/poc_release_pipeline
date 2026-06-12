@@ -76,6 +76,54 @@ run number zero-padded to 4 digits, e.g. `v2026.06.12.0045`. Staging builds get 
 
 Direct pushes to `main` are blocked for everyone; everything goes through a PR.
 
+## Terminal cheat sheet: branch → PR → merge → release
+
+The whole journey from a fresh branch to a production release, console-only:
+
+```sh
+# 0. Start from an up-to-date main
+git switch main
+git pull origin main
+
+# 1. Create a feature branch
+git switch -c feat/my-change
+
+# 2. ...edit files..., then commit
+git add .
+git commit -m "Describe the change"
+
+# 3. Push the branch to GitHub
+git push -u origin feat/my-change
+
+# 4. Open a pull request and wait for CI
+gh pr create --fill        # title/body from your commit message
+gh pr checks --watch       # waits until the build + test checks finish
+
+# 5. Merge after a teammate approves (squash is the only allowed method;
+#    the remote branch is deleted automatically)
+gh pr merge --squash --delete-branch
+#    solo phase only: admins may append --admin to bypass the review requirement
+
+# 6. Back to an up-to-date main
+git switch main
+git pull origin main
+
+# 7. Release to staging (no approval needed) and watch it
+gh workflow run release.yml --ref main -f environment=staging
+sleep 10 && gh run watch "$(gh run list --workflow=release.yml --limit 1 \
+  --json databaseId --jq '.[0].databaseId')"
+
+# 8. Release to production — the run PAUSES for reviewer approval:
+#    an approver opens the run page → "Review deployments" → Approve and deploy
+#    (click path with screenshots: docs/HOW_TO_RELEASE.md)
+gh workflow run release.yml --ref main -f environment=production
+sleep 10 && gh run watch "$(gh run list --workflow=release.yml --limit 1 \
+  --json databaseId --jq '.[0].databaseId')"
+
+# 9. See the published release (tag, ZIP + .sha256, marked Latest)
+gh release view --web
+```
+
 ## Releasing
 
 Short version — full click-by-click guide with screenshots in
