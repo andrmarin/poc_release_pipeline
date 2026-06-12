@@ -72,10 +72,13 @@ gh workflow run release.yml --ref main -f environment=staging
 gh variable set SIM_FAIL_UPLOAD --body false   # disarm
 ```
 
-Expected outcome: `build` fails at "Upload artifact"; `test`/`publish`/`smoke` are skipped;
-no artifact, tag, or release is produced. Safety: the `guard` job refuses **production**
-dispatches while a simulation variable is enabled. Future failure points must follow the
-same convention (`SIM_FAIL_BUILD`, `SIM_FAIL_PUBLISH`, ...) including the production guard.
+Expected outcome: in the `build` job every step up to and including "Build" succeeds
+(`dist/` is produced as normal) and only the "Upload artifact" step fails — the failure
+originates in the targeted step itself, not in any prior step. `test`/`publish`/`smoke`
+are skipped; no artifact, tag, or release is produced. Safety: the `guard` job refuses
+**production** dispatches while a simulation variable is enabled. Future failure points
+must follow the same convention (`SIM_FAIL_BUILD`, `SIM_FAIL_PUBLISH`, ...): fail inside
+the targeted step, include the production guard.
 
 ## Bootstrap (one command, no manual UI setup)
 
