@@ -40,7 +40,7 @@ squash-merge. Done; CI publishes the development artifact.
 After a required reviewer approves the pending deployment, the workflow builds, verifies,
 uploads everything to a *draft* release (a failed upload creates no tag and the draft is
 auto-deleted), then publishes it — which creates the tag — and finally re-downloads the
-published asset and verifies it again (smoke test). If the latest production tag is not
+published asset and verifies it again (post-publish verify). If the latest production tag is not
 an ancestor of `main` (an unmerged hotfix), the release fails on purpose.
 
 **Hotfix (production broken, `main` has unreleased features):**
@@ -79,8 +79,8 @@ gh variable set SIM_FAIL_UPLOAD --body false   # disarm
 
 Expected outcome: in the `build` job every step up to and including "Build" succeeds
 (`dist/` is produced as normal) and only the "Upload artifact" step fails — the failure
-originates in the targeted step itself, not in any prior step. `test`/`publish`/`smoke`
-are skipped; no artifact, tag, or release is produced. Safety: the `guard` job refuses
+originates in the targeted step itself, not in any prior step. `test`/`publish`/
+`post-publish verify` are skipped; no artifact, tag, or release is produced. Safety: the `guard` job refuses
 **production** dispatches while a simulation variable is enabled. Future failure points
 must follow the same convention (`SIM_FAIL_BUILD`, `SIM_FAIL_PUBLISH`, ...): fail inside
 the targeted step, include the production guard.

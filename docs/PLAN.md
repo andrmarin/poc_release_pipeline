@@ -210,7 +210,7 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   3. Verify both assets report state `uploaded`, then publish the draft and mark it latest — this
      final, smallest step is what creates the tag on the built commit via the workflow's
      `GITHUB_TOKEN`.
-  4. **Post-release smoke job:** download the asset *from the published GitHub Release* (not from
+  4. **Post-publish verify job:** download the asset *from the published GitHub Release* (not from
      the workspace) and run `scripts/verify.sh` on it — proves the artifact users will download is
      valid, closing the loop end to end.
 
@@ -281,7 +281,7 @@ The implementation is complete when all of the following are demonstrated:
       `environment=staging`, with **no** tag and **no** GitHub Release created.
 - [ ] Dispatching `release.yml` with `production` pauses for reviewer approval, then creates tag
       `v<date>.<run>`, and a GitHub Release with the ZIP and `.sha256` attached.
-- [ ] The post-release smoke job downloads the released asset and `verify.sh` passes on it.
+- [ ] The post-publish verify job downloads the released asset and `verify.sh` passes on it.
 - [ ] Hotfix drill: a `hotfix/*` branch cut from the latest production tag, with one reviewed PR
       into `main`, releases to production **without** any unreleased `main` features in the ZIP;
       the same PR then merges forward into `main`.
