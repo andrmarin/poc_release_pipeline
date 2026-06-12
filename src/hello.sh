@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Minimal "application": prints a greeting using the build.info stamped into
-# the same ZIP. Gives verify.sh a behavioral assertion, not just file presence.
+# the same ZIP. Gives build-verify.sh a behavioral assertion, not just file presence.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

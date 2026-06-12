@@ -96,7 +96,7 @@ You can run the same build and verification the pipeline runs, on your own machi
 
 ```sh
 ENVIRONMENT=development scripts/build.sh   # creates dist/sample-app-...zip + .sha256
-scripts/verify.sh dist/*.zip development   # checks checksum, contents, build.info, behavior
+scripts/build-verify.sh dist/*.zip development   # checks checksum, contents, build.info, behavior
 ```
 
 Needs bash, `sha256sum`, and either `zip`/`unzip` or Python.
@@ -140,8 +140,9 @@ to the release workflow), `staging`/`production` environments (deployments from 
 `hotfix/*`, production approvers with prevent-self-review), and read-only default Actions
 permissions. Idempotent — re-run anytime.
 
-Solo testing: `--allow-self-review` lets you approve your own production releases;
-re-run without it once the team is onboarded. Admins can bypass PR requirements
+Solo testing: `--allow-self-review` lets you approve your own production releases, and
+`--no-approval` removes the production approval gate entirely (releases publish without
+any pause — PoC/sandbox use only); re-run without these flags once the team is onboarded. Admins can bypass PR requirements
 (merge only, never direct push) — remove that bypass from `protect-main` when the
 team grows. Update [.github/CODEOWNERS](.github/CODEOWNERS) as reviewers join.
 

@@ -6,15 +6,20 @@
 # Usage:
 #   scripts/setup-github.sh [--owner OWNER] [--repo NAME]
 #                           [--approvers user1,user2] [--allow-self-review]
+#                           [--no-approval]
 #
 # Defaults: owner = authenticated gh user, repo = directory name,
 #           approvers = authenticated gh user.
+# --no-approval disables the production deployment-approval gate entirely
+# (no required reviewers — releases publish without a pause). Re-run without
+# the flag to restore the gate.
 set -euo pipefail
 
 OWNER=""
 REPO=""
 APPROVERS=""
 PREVENT_SELF_REVIEW=true
+REQUIRE_APPROVAL=true
 
 info() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33mWARN:\033[0m %s\n' "$*"; }
@@ -26,7 +31,8 @@ while [[ $# -gt 0 ]]; do
     --repo)              REPO="$2"; shift 2 ;;
     --approvers)         APPROVERS="$2"; shift 2 ;;
     --allow-self-review) PREVENT_SELF_REVIEW=false; shift ;;
-    -h|--help)           sed -n '2,12p' "$0"; exit 0 ;;
+    --no-approval)       REQUIRE_APPROVAL=false; shift ;;
+    -h|--help)           sed -n '2,16p' "$0"; exit 0 ;;
     *)                   die "unknown argument: $1 (see --help)" ;;
   esac
 done
@@ -189,13 +195,21 @@ JSON
 ensure_branch_policy staging "main"
 ensure_branch_policy staging "hotfix/*"
 
-info "Configuring environment 'production' (approvers: $APPROVERS)"
-reviewers=""
-for u in ${APPROVERS//,/ }; do
-  id="$(gh api "users/$u" --jq .id)" || die "cannot resolve GitHub user '$u'"
-  reviewers+="{\"type\":\"User\",\"id\":$id},"
-done
-reviewers_json="[${reviewers%,}]"
+if [[ "$REQUIRE_APPROVAL" == "true" ]]; then
+  info "Configuring environment 'production' (approvers: $APPROVERS)"
+  reviewers=""
+  for u in ${APPROVERS//,/ }; do
+    id="$(gh api "users/$u" --jq .id)" || die "cannot resolve GitHub user '$u'"
+    reviewers+="{\"type\":\"User\",\"id\":$id},"
+  done
+  reviewers_json="[${reviewers%,}]"
+  prod_gate="required reviewers ($APPROVERS), prevent_self_review=$PREVENT_SELF_REVIEW"
+else
+  info "Configuring environment 'production' (NO approval gate — --no-approval)"
+  reviewers_json="[]"
+  PREVENT_SELF_REVIEW=false
+  prod_gate="approval gate DISABLED (--no-approval)"
+fi
 
 gh api -X PUT "repos/$full/environments/production" --input - <<JSON >/dev/null
 {
@@ -207,12 +221,14 @@ JSON
 ensure_branch_policy production "main"
 ensure_branch_policy production "hotfix/*"
 
-if [[ "$PREVENT_SELF_REVIEW" == "true" && "$APPROVERS" == "$auth_user" ]]; then
+if [[ "$REQUIRE_APPROVAL" == "false" ]]; then
+  warn "Production releases will publish WITHOUT any human approval."
+  warn "Re-run this script without --no-approval to restore the gate."
+elif [[ "$PREVENT_SELF_REVIEW" == "true" && "$APPROVERS" == "$auth_user" ]]; then
   warn "Sole production approver is you ($auth_user) and prevent-self-review is ON:"
   warn "a production release you dispatch will wait for an approval you cannot give."
   warn "Add teammates via --approvers, or re-run with --allow-self-review for solo testing."
-fi
-if [[ "$PREVENT_SELF_REVIEW" == "false" ]]; then
+elif [[ "$PREVENT_SELF_REVIEW" == "false" ]]; then
   warn "prevent-self-review is OFF — re-run without --allow-self-review once the team is onboarded."
 fi
 
@@ -232,8 +248,8 @@ Bootstrap complete for https://github.com/$full
     admin bypass via PR only (remove once team is onboarded)
   - ruleset 'protect-release-tags': $tag_protection
   - environment 'staging': deployments from main + hotfix/*
-  - environment 'production': required reviewers ($APPROVERS),
-    prevent_self_review=$PREVENT_SELF_REVIEW, deployments from main + hotfix/*
+  - environment 'production': $prod_gate,
+    deployments from main + hotfix/*
   - Actions: read-only default token, cannot approve PRs
 
 Re-running this script converges everything back to this state.

@@ -77,6 +77,8 @@ with the ZIP + `.sha256` are created — fully automatically after the approval.
 
 2. The run starts and then **pauses** — the `build` job shows "Waiting for review".
    This is the safety gate. A yellow banner appears at the top of the run page.
+   (No pause? The repo was bootstrapped with `setup-github.sh --no-approval`, which
+   disables the gate — runs go straight through. Skip to step 4.)
 
    > 📸 **Screenshot placeholder** — *run page with the yellow "This workflow is awaiting approval" banner.*
    > <!-- ![Waiting for review](img/release-05-waiting-review.png) -->
@@ -165,7 +167,7 @@ Optional rehearsal: dispatch a **staging** release from the hotfix branch first.
 
   ```sh
   gh release download --pattern '*'   # in an empty folder
-  bash scripts/verify.sh sample-app-*.zip production
+  bash scripts/build-verify.sh sample-app-*.zip production
   ```
 
 ## Troubleshooting
