@@ -100,10 +100,27 @@ jobs:
           # SIM_FAIL_UPLOAD drill: when armed, this step reads a deliberately
           # empty location and fails on if-no-files-found — the failure happens
           # IN this step; the build output in dist/ and all prior steps are
-          # untouched.
-          path: ${{ vars.SIM_FAIL_UPLOAD == 'true' && 'SIM_FAIL_UPLOAD-is-armed/*' || 'dist/*' }}
+          # untouched. The sentinel path doubles as the how-to-fix message.
+          path: ${{ vars.SIM_FAIL_UPLOAD == 'true' && 'SIMULATED-FAILURE_disarm-with_gh-variable-set-SIM_FAIL_UPLOAD-false_see-README/*' || 'dist/*' }}
           retention-days: ${{ inputs.environment == 'staging' && 30 || 1 }}
           if-no-files-found: error
+
+      - name: Explain simulated upload failure
+        if: failure() && vars.SIM_FAIL_UPLOAD == 'true'
+        run: |
+          echo "::error title=Simulated failure — SIM_FAIL_UPLOAD drill::The 'Upload artifact' failure above is INTENTIONAL: the repository variable SIM_FAIL_UPLOAD is set to 'true'. Disarm it with: gh variable set SIM_FAIL_UPLOAD --body false — see README, section 'Simulating failures (negative-path drills)'."
+          {
+            echo "## 🧪 Simulated upload failure (drill)"
+            echo
+            echo "The \`Upload artifact\` failure in this run is **intentional** — the repository"
+            echo "variable \`SIM_FAIL_UPLOAD\` is currently \`true\`. Nothing is wrong with the build."
+            echo
+            echo '```sh'
+            echo "gh variable set SIM_FAIL_UPLOAD --body false   # disarm the drill"
+            echo '```'
+            echo
+            echo "Details: README → *Simulating failures (negative-path drills)*."
+          } >> "$GITHUB_STEP_SUMMARY"
 
   test:
     name: test

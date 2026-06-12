@@ -64,7 +64,7 @@ Currently implemented:
 
 | Variable | Effect when `true` |
 |---|---|
-| `SIM_FAIL_UPLOAD` | the "Upload artifact" step itself reads a deliberately empty path (`SIM_FAIL_UPLOAD-is-armed/*`) and fails |
+| `SIM_FAIL_UPLOAD` | the "Upload artifact" step itself reads a deliberately empty sentinel path and fails; a follow-up step annotates the run with the disarm command and a link here |
 
 ```sh
 gh variable set SIM_FAIL_UPLOAD --body true    # arm the drill
