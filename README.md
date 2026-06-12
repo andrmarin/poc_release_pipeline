@@ -1,5 +1,9 @@
 # PoC Release Pipeline
 
+[![CI](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml?query=branch%3Amain)
+[![Release](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml/badge.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/andrmarin/poc_release_pipeline?label=latest%20release)](https://github.com/andrmarin/poc_release_pipeline/releases/latest)
+
 Proof-of-concept CI/CD pipeline (GitHub Actions) for a future desktop application.
 The "application" is a ZIP of text files; the pipeline around it is the deliverable.
 Full requirements and rationale: [PLAN.md](docs/PLAN.md).
@@ -49,6 +53,27 @@ scripts/verify.sh dist/*.zip development   # checksum, contents, build.info, beh
 ```
 
 Requires bash, `sha256sum`, and either `zip`/`unzip` or Python.
+
+## Simulating failures (negative-path drills)
+
+Repository variables named `SIM_FAIL_<STAGE>` inject controlled failures into the release
+pipeline so failure behavior can be tested on demand — no commits or branches needed.
+Currently implemented:
+
+| Variable | Effect when `true` |
+|---|---|
+| `SIM_FAIL_UPLOAD` | empties `dist/` after the build, so the "Upload artifact" step fails |
+
+```sh
+gh variable set SIM_FAIL_UPLOAD --body true    # arm the drill
+gh workflow run release.yml --ref main -f environment=staging
+gh variable set SIM_FAIL_UPLOAD --body false   # disarm
+```
+
+Expected outcome: `build` fails at "Upload artifact"; `test`/`publish`/`smoke` are skipped;
+no artifact, tag, or release is produced. Safety: the `guard` job refuses **production**
+dispatches while a simulation variable is enabled. Future failure points must follow the
+same convention (`SIM_FAIL_BUILD`, `SIM_FAIL_PUBLISH`, ...) including the production guard.
 
 ## Bootstrap (one command, no manual UI setup)
 
