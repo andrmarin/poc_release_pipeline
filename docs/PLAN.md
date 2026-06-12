@@ -63,10 +63,7 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 │   ├── verify.sh            # unzips and validates an artifact
 │   └── setup-github.sh      # one-shot, idempotent GitHub bootstrap via gh (spec in §8)
 ├── src/                     # sample app payload; extra files ride along into the ZIP
-│   ├── abc-file-1.txt
-│   ├── app.txt
-│   ├── notes.txt
-│   └── hello.sh             # prints "Hello from <environment> <version>" using build.info
+│
 └── README.md                # entry point: prerequisites, pipeline overview, doc map
 ```
 
