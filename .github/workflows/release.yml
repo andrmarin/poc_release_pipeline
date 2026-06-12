@@ -1,5 +1,9 @@
 name: Release
 
+# Shown as the run title in the Actions tab — without this, every run is
+# just "Release" with no hint of the target environment.
+run-name: "Release: ${{ inputs.environment }} @ ${{ github.ref_name }}"
+
 on:
   workflow_dispatch:
     inputs:
