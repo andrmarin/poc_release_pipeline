@@ -164,4 +164,5 @@ Optional rehearsal: dispatch a **staging** release from the hotfix branch first.
 | `guard` fails: *"SIM_FAIL_UPLOAD is enabled"* on production | drill left armed; production refuses to run with simulations on | disarm (see first row), re-run |
 | `build` fails: *"Latest production tag ... is not an ancestor of main"* | a hotfix was released but its PR never merged into `main` | merge the hotfix PR, then re-run |
 | `publish` fails: *"Tag ... already exists"* | a version collision from a re-run | dispatch a **new** run (fresh run number) instead of re-running |
+| `build` fails: *"Computed version ... is not newer than the latest release"* | you re-ran an old failed run; its frozen run number now computes an outdated version | dispatch a **new** run from the Run workflow panel instead of re-running |
 | Run stuck on *"Waiting for review"* | nobody approved the production gate | an eligible reviewer must click Review deployments → Approve; the person who dispatched may not be allowed to approve themselves |

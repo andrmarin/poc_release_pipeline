@@ -85,6 +85,27 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
+      # Run numbers are frozen per run, so re-running an old failed run on the
+      # same day would compute a version LOWER than the latest release (and a
+      # production re-run would even steal the "Latest" marker). Require the
+      # computed version to sort strictly above the newest existing v* tag.
+      - name: Monotonic version guard
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          base="${VERSION%-staging}"
+          highest="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -v -- '-staging' | head -n 1 || true)"
+          if [[ -n "$highest" ]]; then
+            newest="$(printf '%s\n%s\n' "$highest" "$base" | sort -V | tail -n 1)"
+            if [[ "$newest" != "$base" || "$base" == "$highest" ]]; then
+              echo "::error::Computed version $VERSION is not newer than the latest release ($highest)." \
+                   "This usually means an old failed run was re-run — run numbers are frozen per run." \
+                   "Dispatch a fresh release run instead."
+              exit 1
+            fi
+          fi
+          echo "ok: $VERSION is newer than ${highest:-<no releases yet>}"
+
       - name: Build
         env:
           ENVIRONMENT: ${{ inputs.environment }}
