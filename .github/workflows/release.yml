@@ -134,13 +134,43 @@ jobs:
           name: sample-app-production
           path: dist
 
-      - name: Create tag + GitHub Release
+      # Draft-first publish: a draft release creates NO tag and is not public,
+      # so a failed asset upload leaves nothing half-released. The failure
+      # handler below deletes the leftover draft.
+      - name: Create draft release with assets
         run: |
           gh release create "$VERSION" dist/*.zip dist/*.zip.sha256 \
             --target "$GITHUB_SHA" \
             --title "$VERSION" \
             --generate-notes \
-            --latest
+            --draft
+
+      - name: Verify draft assets, then publish
+        run: |
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select(.draft and .tag_name == \"$VERSION\") | .id" | head -n 1)"
+          [[ -n "$release_id" ]] || { echo "::error::Draft release for $VERSION not found"; exit 1; }
+
+          assets="$(gh api "repos/$GITHUB_REPOSITORY/releases/$release_id/assets" \
+            --jq '.[] | select(.state == "uploaded") | .name')"
+          grep -q  '\.zip$'        <<<"$assets" || { echo "::error::ZIP asset missing from draft"; exit 1; }
+          grep -q  '\.zip\.sha256$' <<<"$assets" || { echo "::error::Checksum asset missing from draft"; exit 1; }
+
+          # Publishing the draft is what creates the v* tag — the final,
+          # smallest possible step.
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$release_id" \
+            -F draft=false -f make_latest=true >/dev/null
+          echo "Published release $VERSION (id $release_id)"
+
+      - name: Delete leftover draft on failure
+        if: failure()
+        run: |
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases" \
+            --jq ".[] | select(.draft and .tag_name == \"$VERSION\") | .id" | head -n 1)"
+          if [[ -n "$release_id" ]]; then
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$release_id"
+            echo "Deleted draft release $release_id — no tag or public release was created."
+          fi
 
   smoke:
     name: smoke
