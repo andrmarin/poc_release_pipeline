@@ -191,10 +191,12 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
 - **Staging path:** upload the verified ZIP + checksum as an Actions artifact with 30-day
   retention. Done — no tag, no release.
 - **Failure simulation:** repository variables following the `SIM_FAIL_<STAGE>` naming convention
-  (first: `SIM_FAIL_UPLOAD`, which empties `dist/` before the artifact upload) inject controlled
-  failures for negative-path drills — toggled with `gh variable set SIM_FAIL_<STAGE> --body
-  true|false`, no commits required; unset evaluates as off. The guard job refuses production
-  dispatches while any simulation variable is enabled.
+  inject controlled failures for negative-path drills — toggled with `gh variable set
+  SIM_FAIL_<STAGE> --body true|false`, no commits required; unset evaluates as off. The failure
+  must occur **inside the targeted step**, never by tampering with earlier steps' output (first:
+  `SIM_FAIL_UPLOAD` switches the upload step's `path` to a deliberately empty location so the
+  upload step itself fails; `dist/` is untouched). The guard job refuses production dispatches
+  while any simulation variable is enabled.
 - **Production path:**
   1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
      most recent production tag is not an ancestor of the commit being released — a prior hotfix
