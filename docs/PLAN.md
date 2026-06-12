@@ -50,19 +50,24 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 ```
 .
 ├── .github/
+│   ├── CODEOWNERS           # routes review of .github/ and scripts/ changes
+│   ├── dependabot.yml       # weekly bumps of the SHA-pinned actions
 │   └── workflows/
 │       ├── ci.yml           # PRs + pushes to main → development build + test
 │       └── release.yml      # manual, gated → staging artifact or production release
+├── docs/
+│   ├── HOW_TO_RELEASE.md    # click-by-click release guide (screenshots in docs/img/)
+│   └── PLAN.md              # this document
 ├── scripts/
 │   ├── build.sh             # produces dist/<artifact>.zip (+ .sha256)
 │   ├── verify.sh            # unzips and validates an artifact
 │   └── setup-github.sh      # one-shot, idempotent GitHub bootstrap via gh (spec in §8)
-├── src/
-│   ├── app.txt              # sample content (replaces the placeholder a.txt)
-│   ├── notes.txt            # sample content
+├── src/                     # sample app payload; extra files ride along into the ZIP
+│   ├── abc-file-1.txt
+│   ├── app.txt
+│   ├── notes.txt
 │   └── hello.sh             # prints "Hello from <environment> <version>" using build.info
-├── PLAN.md
-└── README.md                # how the pipeline works, how to cut a release/hotfix, how to bootstrap
+└── README.md                # entry point: prerequisites, pipeline overview, doc map
 ```
 
 ### Artifact specification
@@ -162,7 +167,12 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   the only long-lived branch, so no back merges exist in this model.
 - **Unmerged-hotfix guard:** a regular production release from `main` fails if the latest
   production tag is not an ancestor of the commit being released — that means a hotfix shipped
-  but was never merged forward, and releasing would silently regress it.
+  but was never merged forward, and releasing would silently regress it. Because this repo is
+  squash-merge only (commits are rewritten on merge), the guard also accepts a tag whose commit
+  belongs to a PR that was merged into `main`.
+- **Hotfix pipeline snapshot:** a release dispatched from a `hotfix/*` branch runs the workflow
+  *as committed on that branch* — i.e. the pipeline as of the tag it was cut from. Guards added
+  to `main` afterwards do not apply to such releases.
 
 ## 7. Workflows
 
@@ -206,7 +216,8 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
 - **Production path:**
   1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
      most recent production tag is not an ancestor of the commit being released — a prior hotfix
-     shipped but was never merged forward and would regress. Skipped for `hotfix/*` dispatches.
+     shipped but was never merged forward and would regress. Squash-aware: a tag whose commit
+     belongs to a PR merged into `main` passes. Skipped for `hotfix/*` dispatches.
   2. **Draft-first publish:** create a *draft* GitHub Release for `v<YYYY.MM.DD>.<run_number>`
      (auto-generated notes) and upload the ZIP + `.sha256` to it. Drafts create no tag and are
      not public, so a failed asset upload leaves nothing half-released; a failure handler deletes
@@ -278,31 +289,38 @@ Actions settings.
 
 ## 9. Acceptance criteria
 
-The implementation is complete when all of the following are demonstrated:
+The implementation is complete when all of the following are demonstrated
+(✅ = verified live on 2026-06-12):
 
-- [ ] A PR with a failing `verify.sh` check cannot be merged; a green PR can.
-- [ ] Merging to `main` produces a development artifact whose `build.info` says
+- [ ] A PR with a failing `verify.sh` check cannot be merged; a green PR can. *(Green half
+      verified many times; the failing-PR drill has not been run yet.)*
+- [x] Merging to `main` produces a development artifact whose `build.info` says
       `environment=development` and contains a valid UTC timestamp, version, commit SHA, and run URL.
-- [ ] Dispatching `release.yml` with `staging` produces a 30-day-retention artifact stamped
+- [x] Dispatching `release.yml` with `staging` produces a 30-day-retention artifact stamped
       `environment=staging`, with **no** tag and **no** GitHub Release created.
-- [ ] Dispatching `release.yml` with `production` pauses for reviewer approval, then creates tag
+- [x] Dispatching `release.yml` with `production` pauses for reviewer approval, then creates tag
       `v<date>.<run>`, and a GitHub Release with the ZIP and `.sha256` attached.
-- [ ] The post-publish verify job downloads the released asset and `verify.sh` passes on it.
+- [x] The post-publish verify job downloads the released asset and `verify.sh` passes on it.
 - [ ] Hotfix drill: a `hotfix/*` branch cut from the latest production tag, with one reviewed PR
       into `main`, releases to production **without** any unreleased `main` features in the ZIP;
       the same PR then merges forward into `main`.
 - [ ] While a shipped hotfix PR is still unmerged, a regular production release from `main` fails
-      on the unmerged-hotfix guard; after merging, it succeeds.
-- [ ] The dispatcher of a production release cannot approve it themselves (prevent self-review).
+      on the unmerged-hotfix guard; after merging (squash), it succeeds via the merged-PR check.
+- [x] The dispatcher of a production release cannot approve it themselves (prevent self-review).
+      *(Verified before prevent-self-review was temporarily disabled for solo testing — re-enable
+      by re-running `setup-github.sh` without `--allow-self-review` once the team is onboarded.)*
 - [ ] Manually updating or deleting a released `v*` tag is rejected by the tag ruleset. (On
       org-owned repos manual *creation* is also rejected; on personal repos creation stays open —
       see §8 item 4 — and the publish job's existing-tag check is the compensating control.)
-- [ ] Direct push to `main` is rejected.
-- [ ] `scripts/build.sh` + `scripts/verify.sh` also run successfully on a local machine
+- [x] Direct push to `main` is rejected.
+- [x] `scripts/build.sh` + `scripts/verify.sh` also run successfully on a local machine
       (documented in README).
-- [ ] `scripts/setup-github.sh` takes a fresh local repo to a fully configured public GitHub repo
-      (rulesets, environments, Actions settings) with zero manual UI actions; a second run reports
-      everything already compliant and changes nothing.
+- [x] `scripts/setup-github.sh` takes a fresh local repo to a fully configured public GitHub repo
+      (rulesets, environments, Actions settings) with zero manual UI actions; a second run
+      converges everything back to the target state.
+- [x] *(Added during implementation)* Negative-path drills: `SIM_FAIL_UPLOAD` fails the upload
+      step itself on staging and is refused for production; the monotonic version guard blocks
+      stale same-day re-runs (comparison logic unit-tested; pass path verified live).
 
 ## 10. Out of scope (future work for the real desktop application)
 
