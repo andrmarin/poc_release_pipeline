@@ -101,6 +101,10 @@ with the ZIP + `.sha256` are created — fully automatically after the approval.
    > 📸 **Screenshot placeholder** — *Releases page with the new version at the top, marked Latest, two assets expanded.*
    > <!-- ![Releases page](img/release-07-releases-page.png) -->
 
+> **Note:** the release builds the commit `main` pointed at when the run was **dispatched**.
+> PRs merged while the run waits for approval are *not* included — dispatch a fresh run if you
+> want them.
+
 ### From the terminal
 
 ```sh
@@ -127,16 +131,20 @@ do **not** want to ship yet.
 
 3. Make the fix, push the branch, and open a PR into `main`. This PR gets the one and
    only code review.
-4. After the PR is approved (do not merge yet, or merge — both work), run the
-   **Release** workflow, but in the **Run workflow** panel select **your hotfix branch**
-   instead of `main`, environment **production**. Approval works the same as above.
+4. After the PR is approved — but **before merging it** (merging auto-deletes the
+   branch, and a deleted branch cannot be dispatched) — run the **Release** workflow:
+   in the **Run workflow** panel select **your hotfix branch** instead of `main`,
+   environment **production**. Approval works the same as above. Heads-up: the run
+   executes the pipeline *as it exists on your hotfix branch*, i.e. as of the tag you
+   branched from.
 
    > 📸 **Screenshot placeholder** — *Run workflow panel with branch `hotfix/fix-crash` selected and environment `production`.*
    > <!-- ![Hotfix dispatch](img/release-08-hotfix-dispatch.png) -->
 
-5. **Merge the hotfix PR into `main`** afterwards if you haven't already. This is
-   required: the next regular production release **fails on purpose** if a released
-   hotfix was never merged back (so the fix can't silently disappear).
+5. **Merge the hotfix PR into `main`** after the release. This is required: the next
+   regular production release **fails on purpose** if a released hotfix was never
+   merged back (so the fix can't silently disappear). Squash-merging is fine — the
+   guard recognizes the merged PR.
 
 Optional rehearsal: dispatch a **staging** release from the hotfix branch first.
 
