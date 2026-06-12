@@ -2,7 +2,7 @@
 
 Proof-of-concept CI/CD pipeline (GitHub Actions) for a future desktop application.
 The "application" is a ZIP of text files; the pipeline around it is the deliverable.
-Full requirements and rationale: [PLAN.md](PLAN.md).
+Full requirements and rationale: [PLAN.md](docs/PLAN.md).
 
 ## How it works
 
