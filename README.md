@@ -1,8 +1,13 @@
 # PoC Release Pipeline
 
 [![CI](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml?query=branch%3Amain)
-[![Release](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml/badge.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![Staging](https://img.shields.io/github/deployments/andrmarin/poc_release_pipeline/staging?label=staging)](https://github.com/andrmarin/poc_release_pipeline/deployments)
+[![Production](https://img.shields.io/github/deployments/andrmarin/poc_release_pipeline/production?label=production)](https://github.com/andrmarin/poc_release_pipeline/deployments)
 [![Latest release](https://img.shields.io/github/v/release/andrmarin/poc_release_pipeline?label=latest%20release)](https://github.com/andrmarin/poc_release_pipeline/releases/latest)
+
+*Badges: CI = development build health on `main`; staging/production = status of each
+environment's most recent release (the gated build job of `release.yml`); a production
+release awaiting reviewer approval shows as pending.*
 
 Proof-of-concept CI/CD pipeline (GitHub Actions) for a future desktop application.
 The "application" is a ZIP of text files; the pipeline around it is the deliverable.
