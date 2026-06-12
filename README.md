@@ -96,7 +96,7 @@ You can run the same build and verification the pipeline runs, on your own machi
 
 ```sh
 ENVIRONMENT=development scripts/build.sh   # creates dist/sample-app-...zip + .sha256
-scripts/build-verify.sh dist/*.zip development   # checks checksum, contents, build.info, behavior
+scripts/verify.sh dist/*.zip development   # checks checksum, contents, build.info, behavior
 ```
 
 Needs bash, `sha256sum`, and either `zip`/`unzip` or Python.

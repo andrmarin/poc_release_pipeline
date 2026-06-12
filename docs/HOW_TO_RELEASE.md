@@ -167,7 +167,7 @@ Optional rehearsal: dispatch a **staging** release from the hotfix branch first.
 
   ```sh
   gh release download --pattern '*'   # in an empty folder
-  bash scripts/build-verify.sh sample-app-*.zip production
+  bash scripts/verify.sh sample-app-*.zip production
   ```
 
 ## Troubleshooting
