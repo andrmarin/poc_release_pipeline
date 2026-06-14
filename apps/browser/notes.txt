@@ -1,0 +1,5 @@
+Release notes placeholder for the BROWSER sample application.
+
+The real browser application will replace the contents of apps/browser/
+entirely; the pipeline around it (workflows, scripts, protections) is the
+deliverable. Released independently of apps/desktop.

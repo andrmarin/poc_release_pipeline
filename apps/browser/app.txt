@@ -1,0 +1,5 @@
+This file represents the application payload of the BROWSER sample app.
+
+It exists so the browser release ZIP has real content to carry through the
+pipeline: build -> test -> (staging | production release), independently of
+the desktop app.

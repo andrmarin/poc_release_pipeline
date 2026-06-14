@@ -1,12 +1,18 @@
 name: Release
 
-# Shown as the run title in the Actions tab — without this, every run is
-# just "Release" with no hint of the target environment.
-run-name: "Release: ${{ inputs.environment }} @ ${{ github.ref_name }}"
+# Shown as the run title in the Actions tab so app + environment are obvious.
+run-name: "Release: ${{ inputs.app }} ${{ inputs.environment }} @ ${{ github.ref_name }}"
 
 on:
   workflow_dispatch:
     inputs:
+      app:
+        description: App to release
+        required: true
+        type: choice
+        options:
+          - desktop
+          - browser
       environment:
         description: Target environment
         required: true
@@ -18,9 +24,10 @@ on:
 permissions:
   contents: read
 
-# Never cancel a running release; a second dispatch queues behind it.
+# Serialize same app+environment; let different apps (and environments) run
+# concurrently so the two apps release independently.
 concurrency:
-  group: release-${{ inputs.environment }}
+  group: release-${{ inputs.app }}-${{ inputs.environment }}
   cancel-in-progress: false
 
 jobs:
@@ -51,25 +58,27 @@ jobs:
     name: build
     needs: guard
     runs-on: ubuntu-latest
-    # The environment gate: 'production' requires reviewer approval before
-    # this job (and everything after it) runs.
-    environment: ${{ inputs.environment }}
+    # Per-app environment gate: '<app>-production' requires reviewer approval
+    # before this job (and everything after it) runs.
+    environment: ${{ inputs.app }}-${{ inputs.environment }}
+    env:
+      APP: ${{ inputs.app }}
     outputs:
       version: ${{ steps.version.outputs.version }}
       artifact: ${{ steps.artifact.outputs.name }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
-          fetch-depth: 0 # full history + tags, needed for the unmerged-hotfix guard
+          fetch-depth: 0 # full history + tags, needed for the per-app guards
 
       - name: Unmerged-hotfix guard
         if: inputs.environment == 'production' && github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          last_tag="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -v -- '-staging' | head -n 1 || true)"
+          last_tag="$(git tag --list "${APP}-v[0-9]*" --sort=-v:refname | grep -v -- '-staging' | head -n 1 || true)"
           if [[ -z "$last_tag" ]] || git merge-base --is-ancestor "$last_tag" HEAD; then
-            echo "ok: ${last_tag:-no previous production tag} is an ancestor of HEAD"
+            echo "ok: ${last_tag:-no previous $APP production tag} is an ancestor of HEAD"
             exit 0
           fi
           # This repo is squash-merge only, which rewrites commits — so a
@@ -82,7 +91,7 @@ jobs:
             echo "ok: $last_tag is not a literal ancestor (squash-merge), but PR #$merged_pr containing it was merged into main"
             exit 0
           fi
-          echo "::error::Latest production tag '$last_tag' is not an ancestor of main and no merged PR contains its commit." \
+          echo "::error::Latest $APP production tag '$last_tag' is not an ancestor of main and no merged PR contains its commit." \
                "A hotfix was released but never merged forward — releasing now would regress it." \
                "Merge the hotfix PR into main first."
           exit 1
@@ -90,35 +99,33 @@ jobs:
       - name: Compute version
         id: version
         run: |
-          # Run number is zero-padded: GitHub's Releases page orders entries by
-          # comparing tag names as strings, so fixed-width components are required
-          # to keep newest-on-top (v...13 would sort below v...9 otherwise).
+          # Run number zero-padded so tag-name string order == chronological
+          # order on the Releases page. The app prefix is added at tag time.
           version="v$(date -u +%Y.%m.%d).$(printf '%04d' "$GITHUB_RUN_NUMBER")"
           if [[ "${{ inputs.environment }}" == "staging" ]]; then
             version="${version}-staging"
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      # Run numbers are frozen per run, so re-running an old failed run on the
-      # same day would compute a version LOWER than the latest release (and a
-      # production re-run would even steal the "Latest" marker). Require the
-      # computed version to sort strictly above the newest existing v* tag.
+      # Run numbers are frozen per run, so re-running an old failed run could
+      # compute a version LOWER than this app's latest release. Require the
+      # computed version to sort strictly above this app's newest tag.
       - name: Monotonic version guard
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          base="${VERSION%-staging}"
-          highest="$(git tag --list 'v[0-9]*' --sort=-v:refname | grep -v -- '-staging' | head -n 1 || true)"
+          cand="${APP}-${VERSION%-staging}"
+          highest="$(git tag --list "${APP}-v[0-9]*" --sort=-v:refname | grep -v -- '-staging' | head -n 1 || true)"
           if [[ -n "$highest" ]]; then
-            newest="$(printf '%s\n%s\n' "$highest" "$base" | sort -V | tail -n 1)"
-            if [[ "$newest" != "$base" || "$base" == "$highest" ]]; then
-              echo "::error::Computed version $VERSION is not newer than the latest release ($highest)." \
+            newest="$(printf '%s\n%s\n' "$highest" "$cand" | sort -V | tail -n 1)"
+            if [[ "$newest" != "$cand" || "$cand" == "$highest" ]]; then
+              echo "::error::Computed version $cand is not newer than $APP's latest release ($highest)." \
                    "This usually means an old failed run was re-run — run numbers are frozen per run." \
                    "Dispatch a fresh release run instead."
               exit 1
             fi
           fi
-          echo "ok: $VERSION is newer than ${highest:-<no releases yet>}"
+          echo "ok: $cand is newer than ${highest:-<no $APP releases yet>}"
 
       - name: Build
         env:
@@ -129,8 +136,7 @@ jobs:
         run: bash scripts/build.sh
 
       # Single source of truth for the artifact name is the ZIP build.sh
-      # produced — unique per run (version embeds date + padded run number),
-      # so downloads never collide in a Downloads folder.
+      # produced (<app>-<version>...), unique per run so downloads never collide.
       - name: Artifact name
         id: artifact
         run: |
@@ -183,7 +189,7 @@ jobs:
         run: |
           files=(dist/*.zip)
           [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
-          bash scripts/verify.sh "${files[0]}" "${{ inputs.environment }}"
+          bash scripts/verify.sh "${files[0]}" "${{ inputs.environment }}" "${{ inputs.app }}"
 
   publish:
     name: publish
@@ -193,15 +199,17 @@ jobs:
     permissions:
       contents: write # create the tag + GitHub Release
     env:
+      APP: ${{ inputs.app }}
       VERSION: ${{ needs.build.outputs.version }}
+      TAG: ${{ inputs.app }}-${{ needs.build.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Refuse to overwrite an existing tag
         run: |
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$VERSION" >/dev/null 2>&1; then
-            echo "::error::Tag $VERSION already exists — refusing to overwrite. Dispatch a fresh release run."
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "::error::Tag $TAG already exists — refusing to overwrite. Dispatch a fresh release run."
             exit 1
           fi
 
@@ -213,24 +221,20 @@ jobs:
 
       # Draft-first publish: a draft release creates NO tag and is not public,
       # so a failed asset upload leaves nothing half-released. The failure
-      # handler below deletes the leftover draft.
-      #
-      # The draft's id is captured from the create response and passed between
-      # steps — never searched by name afterwards. (Searching the list endpoint
-      # for a just-created draft proved unreliable: runs failed with "Draft
-      # release not found" even though the draft existed.)
+      # handler below deletes the leftover draft. The draft's id is captured
+      # from the create response and passed between steps — never searched by
+      # name (the list endpoint proved unreliable for just-created drafts).
       - name: Create draft release with assets
         id: draft
         run: |
           # GitHub intermittently rejects these calls with a spurious
-          # "403 Resource not accessible by integration" (observed twice on
-          # otherwise-identical runs) — retry with backoff before giving up.
+          # "403 Resource not accessible by integration" — retry with backoff.
           release_id=""
           for i in 1 2 3; do
             if gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
-                 -f tag_name="$VERSION" \
+                 -f tag_name="$TAG" \
                  -f target_commitish="$GITHUB_SHA" \
-                 -f name="$VERSION" \
+                 -f name="$APP $VERSION" \
                  -F draft=true \
                  -F generate_release_notes=true \
                  --jq '.id' > release_id.txt; then
@@ -242,7 +246,7 @@ jobs:
           done
           [[ -n "$release_id" ]] || { echo "::error::Could not create the draft release after 3 attempts."; exit 1; }
           echo "release_id=$release_id" >> "$GITHUB_OUTPUT"
-          echo "Created draft release $VERSION (id $release_id)"
+          echo "Created draft release $TAG (id $release_id)"
 
           for f in dist/*.zip dist/*.zip.sha256; do
             uploaded=false
@@ -274,11 +278,12 @@ jobs:
           grep -q  '\.zip$'        <<<"$assets" || { echo "::error::ZIP asset missing from draft"; exit 1; }
           grep -q  '\.zip\.sha256$' <<<"$assets" || { echo "::error::Checksum asset missing from draft"; exit 1; }
 
-          # Publishing the draft is what creates the v* tag — the final,
-          # smallest possible step.
+          # Publishing the draft is what creates the tag — the final, smallest
+          # step. make_latest marks this the global "Latest" release (the most
+          # recent across both apps; per-app version is on the per-app badge).
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
             -F draft=false -f make_latest=true >/dev/null
-          echo "Published release $VERSION (id $RELEASE_ID)"
+          echo "Published release $TAG (id $RELEASE_ID)"
 
       - name: Delete leftover draft on failure
         if: failure()
@@ -299,19 +304,19 @@ jobs:
     needs: [build, publish]
     runs-on: ubuntu-latest
     env:
-      VERSION: ${{ needs.build.outputs.version }}
+      TAG: ${{ inputs.app }}-${{ needs.build.outputs.version }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
 
       - name: Download asset from the published release
-        run: gh release download "$VERSION" --dir published
+        run: gh release download "$TAG" --dir published
 
       - name: Verify released asset
         run: |
           files=(published/*.zip)
           [[ ${#files[@]} -eq 1 ]] || { echo "expected exactly one ZIP, found: ${files[*]}"; exit 1; }
-          bash scripts/verify.sh "${files[0]}" production
+          bash scripts/verify.sh "${files[0]}" production "${{ inputs.app }}"
 
       # GitHub's run-duration display is wall clock INCLUDING approval wait and
       # cannot be configured — so report the actual execution time ourselves.
@@ -337,19 +342,17 @@ jobs:
             echo "| Waiting (approval gate + queueing) | $(fmt "$wait_s") |"
           } >> "$GITHUB_STEP_SUMMARY"
 
-  # Self-hosted README badges: rendered here and pushed to the unprotected
-  # 'badges' branch (seeded by setup-github.sh), served via
-  # raw.githubusercontent.com. Replaces shields.io's GitHub integrations,
-  # which intermittently fail with "Unable to select next GitHub token from
-  # pool".
+  # Self-hosted README badges, per app: rendered here and pushed to the
+  # 'badges' tag (seeded by setup-github.sh), served via raw.githubusercontent.com.
   badge:
     name: badge
     if: always() && needs.build.result != 'skipped' && needs.build.result != 'cancelled'
     needs: [build, test, publish, post-publish-verify]
     runs-on: ubuntu-latest
     permissions:
-      contents: write # push badge updates to the badges branch
+      contents: write # push badge updates to the badges tag
     env:
+      APP: ${{ inputs.app }}
       VERSION: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -361,10 +364,8 @@ jobs:
           test_r="${{ needs.test.result }}"
           pub_r="${{ needs.publish.result }}"
           ppv_r="${{ needs['post-publish-verify'].result }}"
-          # A rejected production deployment (or any abort before the build
-          # actually started) leaves the version output empty — no release was
-          # attempted, so the previously published version is still the truth.
-          # Leave the badges untouched rather than flip the status to failing.
+          # No version computed -> deployment rejected at the gate or aborted
+          # before build. No release was attempted, so leave badges unchanged.
           if [[ -z "$VERSION" ]]; then
             echo "update=false" >> "$GITHUB_OUTPUT"
             echo "No version computed — deployment rejected at the gate or aborted before build. Leaving badges unchanged."
@@ -382,25 +383,24 @@ jobs:
             [[ "$pub_r" == "success" && "$ppv_r" == "success" ]] && status=passing || status=failing
           fi
           color="#4c1"; [[ "$status" == "failing" ]] && color="#e05d44"
-          bash scripts/badge.sh "$env_name" "$status" "$color" > "out/$env_name.svg"
-          echo "rendered $env_name: $status"
+          bash scripts/badge.sh "$APP $env_name" "$status" "$color" > "out/${APP}-${env_name}.svg"
+          echo "rendered ${APP}-${env_name}: $status"
           if [[ "$env_name" == "production" && "$status" == "passing" ]]; then
-            bash scripts/badge.sh "latest release" "$VERSION" "#007ec6" > out/latest-release.svg
-            echo "rendered latest release: $VERSION"
+            bash scripts/badge.sh "$APP latest" "$VERSION" "#007ec6" > "out/${APP}-latest-release.svg"
+            echo "rendered ${APP}-latest-release: $VERSION"
           fi
           echo "update=true" >> "$GITHUB_OUTPUT"
 
-      # The badges live on a force-updated TAG, not a branch: branch pushes
-      # trigger GitHub's "had recent pushes" banner on the repo home page,
-      # tag pushes don't. Each update is a parentless commit (no history
-      # growth); raw.githubusercontent.com serves tags exactly like branches.
+      # Badges live on a force-updated TAG (not a branch, so no "recent pushes"
+      # banner). We overlay only this app's SVGs onto the existing tree, so the
+      # other app's badges are preserved.
       - name: Push to badges tag
         if: steps.render.outputs.update == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          # Staging and production runs may race on this ref — re-read,
-          # overlay, and push with a lease; retry on conflict.
+          # Apps/environments may race on this ref — re-read, overlay, push with
+          # a lease; retry on conflict.
           for i in 1 2 3; do
             git fetch origin refs/tags/badges
             old="$(git rev-parse FETCH_HEAD)"
@@ -412,7 +412,7 @@ jobs:
               echo "Badges already up to date."
               exit 0
             fi
-            commit="$(git commit-tree "$tree" -m "badges: ${{ inputs.environment }} run #$GITHUB_RUN_NUMBER")"
+            commit="$(git commit-tree "$tree" -m "badges: ${{ inputs.app }} ${{ inputs.environment }} run #$GITHUB_RUN_NUMBER")"
             if git push --force-with-lease=refs/tags/badges:"$old" origin "$commit:refs/tags/badges"; then
               echo "Badges updated ($commit)."
               exit 0

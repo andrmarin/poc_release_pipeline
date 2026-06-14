@@ -13,4 +13,4 @@ fi
 
 get() { sed -n "s/^$1=//p" "$info_file" | head -n 1; }
 
-echo "Hello from $(get environment) $(get version)"
+echo "Hello from $(get app) $(get environment) $(get version)"

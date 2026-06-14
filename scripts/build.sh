@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-# Builds the release artifact: dist/sample-app-<version>-<environment>.zip
+# Builds one app's release artifact: dist/<app>-<version>-<environment>.zip
 # plus a .sha256 checksum file next to it.
 #
 # Inputs (environment variables, all optional except in CI):
+#   APP           desktop | browser                     (default: desktop)
 #   ENVIRONMENT   development | staging | production   (default: development)
 #   VERSION       artifact version                      (default: local pseudo-version)
 #   COMMIT        full git SHA                          (default: from local git)
 #   WORKFLOW_RUN  URL of the CI run                     (default: "local")
 set -euo pipefail
 
+APP="${APP:-desktop}"
 ENVIRONMENT="${ENVIRONMENT:-development}"
 VERSION="${VERSION:-}"
 COMMIT="${COMMIT:-}"
@@ -23,6 +25,16 @@ case "$ENVIRONMENT" in
 esac
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+case "$APP" in
+  desktop|browser) ;;
+  *)
+    echo "ERROR: APP must be one of desktop|browser, got '$APP'" >&2
+    exit 1
+    ;;
+esac
+app_dir="$repo_root/apps/$APP"
+[[ -d "$app_dir" ]] || { echo "ERROR: app directory not found: apps/$APP" >&2; exit 1; }
 
 if [[ -z "$COMMIT" ]]; then
   COMMIT="$(git -C "$repo_root" rev-parse HEAD 2>/dev/null || echo unknown)"
@@ -39,9 +51,10 @@ stage="$dist/.stage"
 rm -rf "$dist"
 mkdir -p "$stage"
 
-cp -r "$repo_root/src/." "$stage/"
+cp -r "$app_dir/." "$stage/"
 
 cat > "$stage/build.info" <<EOF
+app=$APP
 environment=$ENVIRONMENT
 build_timestamp=$build_timestamp
 version=$VERSION
@@ -53,8 +66,8 @@ EOF
 # and development (-dev+<sha>) builds; only append ENVIRONMENT when it does
 # not, to avoid names like "...-staging-staging.zip".
 case "$VERSION" in
-  *-staging|*-dev+*) artifact="sample-app-${VERSION}.zip" ;;
-  *)                 artifact="sample-app-${VERSION}-${ENVIRONMENT}.zip" ;;
+  *-staging|*-dev+*) artifact="${APP}-${VERSION}.zip" ;;
+  *)                 artifact="${APP}-${VERSION}-${ENVIRONMENT}.zip" ;;
 esac
 
 # zip is present on GitHub runners; fall back to Python locally (e.g. Git Bash).

@@ -2,14 +2,17 @@ name: Tag police
 
 run-name: "Tag police: ${{ github.ref_name }}"
 
-# Deletes malformed v* tags the moment they are pushed. Ruleset-level name
-# validation (tag_name_pattern) requires GitHub Enterprise, so on this plan
-# the protect-release-tags ruleset only covers WELL-FORMED release tags
-# (exact fnmatch include) — malformed look-alikes are outside it, which is
-# precisely what lets this workflow delete them.
+# Deletes malformed release tags the moment they are pushed. Ruleset-level name
+# validation (tag_name_pattern) requires GitHub Enterprise, so on this plan the
+# protect-release-tags ruleset only covers WELL-FORMED app tags (exact fnmatch
+# include) — malformed look-alikes are outside it, which is what lets this
+# workflow delete them. Triggers on app tags and on bare v* (now malformed).
 on:
   push:
-    tags: ['v*']
+    tags:
+      - 'desktop-v*'
+      - 'browser-v*'
+      - 'v*'
 
 permissions:
   contents: write # delete malformed tags
@@ -23,12 +26,12 @@ jobs:
     steps:
       - name: Enforce release-version format
         run: |
-          if [[ "$GITHUB_REF_NAME" =~ ^v[0-9]{4}[.][0-9]{2}[.][0-9]{2}[.][0-9]{4}$ ]]; then
+          if [[ "$GITHUB_REF_NAME" =~ ^(desktop|browser)-v[0-9]{4}[.][0-9]{2}[.][0-9]{2}[.][0-9]{4}$ ]]; then
             echo "ok: '$GITHUB_REF_NAME' is a well-formed release tag"
             exit 0
           fi
           echo "Deleting malformed tag '$GITHUB_REF_NAME' ..."
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$GITHUB_REF_NAME"
-          echo "::error::Tag '$GITHUB_REF_NAME' does not match the release format vYYYY.MM.DD.NNNN and has been deleted." \
+          echo "::error::Tag '$GITHUB_REF_NAME' does not match the release format <app>-vYYYY.MM.DD.NNNN and has been deleted." \
                "Release tags are created only by the release workflow — see docs/HOW_TO_RELEASE.md."
           exit 1
