@@ -28,21 +28,13 @@ public release, and needs no approval.
 ### In the browser
 
 1. Open the repository on github.com and click the **Actions** tab (top of the page).
-
-   > 📸 **Screenshot placeholder** — *the repository header with the Actions tab highlighted.*
-   > <!-- ![Actions tab](img/release-01-actions-tab.png) -->
+   ![Release workflow](img/release-01-release-workflow.png)
 
 2. In the **left sidebar**, under "All workflows", click **Release**.
-
-   > 📸 **Screenshot placeholder** — *Actions page with the "Release" workflow selected in the sidebar.*
-   > <!-- ![Release workflow](img/release-02-release-workflow.png) -->
 
 3. On the right side, click the **Run workflow** dropdown button. In the panel that
    opens: leave **Branch: main** as is, set **Target environment** to **staging**, and
    click the green **Run workflow** button.
-
-   > 📸 **Screenshot placeholder** — *the "Run workflow" panel with branch `main` and environment `staging` selected.*
-   > <!-- ![Run workflow panel](img/release-03-run-workflow-staging.png) -->
 
 4. A new run named **"Release: staging @ main"** appears in the list after a few
    seconds (refresh if needed). Click it and watch the jobs turn green:
@@ -53,9 +45,7 @@ public release, and needs no approval.
    after its version — e.g. `sample-app-v2026.06.12.0045-staging` (names are unique per
    run and sort chronologically in your Downloads folder). Click it to download a ZIP
    containing the build and its checksum. It is kept for 30 days.
-
-   > 📸 **Screenshot placeholder** — *run page scrolled to the Artifacts section with `sample-app-staging` visible.*
-   > <!-- ![Staging artifact](img/release-04-staging-artifact.png) -->
+   ![Staging artifact](img/release-02-staging-artifact.png)
 
 ### From the terminal
 
