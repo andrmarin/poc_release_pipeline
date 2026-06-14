@@ -2,12 +2,10 @@
 
 [![CI](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml?query=branch%3Amain)
 
-**desktop** &nbsp;
 [![desktop staging](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/desktop-staging.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
 [![desktop production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/desktop-production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
 [![desktop latest](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/desktop-latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases)
 
-**browser** &nbsp;
 [![browser staging](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/browser-staging.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
 [![browser production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/browser-production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
 [![browser latest](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/browser-latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases)
