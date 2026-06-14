@@ -47,82 +47,90 @@ the ZIP so the "test" stage can assert *behavior*, not just file presence.
 
 ### Repository layout
 
+This is a **monorepo** with two independently-released apps under `apps/`.
+
 ```
 .
 ├── .github/
 │   ├── CODEOWNERS           # routes review of .github/ and scripts/ changes
 │   ├── dependabot.yml       # weekly bumps of the SHA-pinned actions
 │   └── workflows/
-│       ├── ci.yml           # PRs + pushes to main → development build + test
-│       ├── release.yml      # manual, gated → staging artifact or production release
-│       └── tag-police.yml   # auto-deletes malformed v* tags on push
+│       ├── ci.yml           # PRs/pushes → build+test only the changed app(s)
+│       ├── release.yml      # manual, gated → release one app to staging/production
+│       └── tag-police.yml   # auto-deletes malformed <app>-v* tags on push
+├── apps/
+│   ├── desktop/             # desktop app payload (rides into the ZIP)
+│   └── browser/             # browser app payload
 ├── docs/
 │   ├── HOW_TO_RELEASE.md    # click-by-click release guide (screenshots in docs/img/)
 │   ├── ISSUES.md            # log of issues faced and how each was solved
 │   └── PLAN.md              # this document
 ├── scripts/
 │   ├── badge.sh             # renders self-hosted status badge SVGs (README badges)
-│   ├── build.sh             # produces dist/<artifact>.zip (+ .sha256)
-│   ├── verify.sh            # unzips and validates an artifact
+│   ├── build.sh             # builds one app: dist/<app>-<version>-<env>.zip (+ .sha256)
+│   ├── verify.sh            # unzips and validates an app artifact
 │   └── setup-github.sh      # one-shot, idempotent GitHub bootstrap via gh (spec in §8)
-├── src/                     # sample app payload; extra files ride along into the ZIP
-│
 └── README.md                # entry point: prerequisites, pipeline overview, doc map
 ```
 
 ### Artifact specification
 
-- Name: `sample-app-<version>-<environment>.zip` (e.g. `sample-app-v2026.06.12.0045-production.zip`).
+- Name: `<app>-<version>-<environment>.zip` (e.g. `desktop-v2026.06.14.0045-production.zip`).
   The environment suffix is omitted when the version already ends with an environment marker
   (`-staging`, `-dev+<sha>`), avoiding names like `...-staging-staging.zip`.
 - The Actions **artifact container** uses the ZIP's base name (set from the built file, single
-  source of truth) — names are unique per run and sort chronologically, so downloads never
+  source of truth) — names are unique per app+run and sort chronologically, so downloads never
   collide in a Downloads folder.
-- Contents: everything under `src/` **plus a generated `build.info`** at the ZIP root.
+- Contents: everything under `apps/<app>/` **plus a generated `build.info`** at the ZIP root.
 - A `<artifact>.zip.sha256` checksum file is produced next to every ZIP and published with it.
 
 ### `build.info` format (key=value, one per line)
 
 ```
+app=desktop                       # which app this artifact is
 environment=production            # required by the task
-build_timestamp=2026-06-12T14:30:00Z   # required by the task; UTC, ISO 8601
-version=v2026.06.12.45
+build_timestamp=2026-06-14T14:30:00Z   # required by the task; UTC, ISO 8601
+version=v2026.06.14.0045
 commit=<full git SHA>
 workflow_run=<URL of the Actions run that built it>
 ```
 
-`environment` and `build_timestamp` are the user's hard requirements; the other three fields are
-added for traceability (any downloaded ZIP can be traced back to its exact commit and CI run).
+`environment` and `build_timestamp` are the user's hard requirements; the others are added for
+traceability (any downloaded ZIP traces back to its app, exact commit, and CI run).
 
 ### `scripts/build.sh` requirements
 
-- Inputs via environment variables: `ENVIRONMENT` (one of `development|staging|production`),
-  `VERSION`, plus git SHA and run URL when available (sane local defaults so the script also runs
-  on a developer machine).
-- Validates `ENVIRONMENT` against the allowed list and fails loudly otherwise.
-- Generates `build.info`, stages `src/` + `build.info`, produces the ZIP and `.sha256` into `dist/`.
+- Inputs via environment variables: `APP` (one of `desktop|browser`, default `desktop`),
+  `ENVIRONMENT` (one of `development|staging|production`), `VERSION`, plus git SHA and run URL
+  when available (sane local defaults so the script also runs on a developer machine).
+- Validates `APP` and `ENVIRONMENT` against their allowed lists, and that `apps/<APP>` exists.
+- Generates `build.info`, stages `apps/<APP>/` + `build.info`, produces the ZIP and `.sha256`.
 
 ### `scripts/verify.sh` requirements (the "test" stage)
 
-Given a ZIP path and an expected environment, it must:
+Given a ZIP path, an expected environment, and an expected app, it must:
 
 1. Verify the `.sha256` checksum matches the ZIP.
 2. Unzip to a temp dir and assert all expected files are present.
-3. Assert `build.info` exists and that `environment`, `build_timestamp`, `version`, `commit` are
-   non-empty; assert `environment` equals the expected value; assert the timestamp parses as
-   ISO 8601 UTC.
-4. Execute `hello.sh` from the extracted ZIP and assert its output contains the environment and
-   version (behavioral check).
+3. Assert `build.info` exists and that `app`, `environment`, `build_timestamp`, `version`,
+   `commit` are non-empty; assert `app`/`environment` equal the expected values; assert the
+   timestamp parses as ISO 8601 UTC.
+4. Execute `hello.sh` from the extracted ZIP and assert its output contains the app, environment,
+   and version (behavioral check).
 5. Exit non-zero with a clear message on any failure.
 
 ## 5. Versioning scheme
 
+Per app, tags are namespaced `<app>-<version>` (e.g. `desktop-v2026.06.14.0045`), so the two
+apps version independently. The `<version>` part:
+
 - **Production:** `v<YYYY.MM.DD>.<run_number>` where the date is the UTC date and `run_number` is
-  the `release.yml` workflow run number **zero-padded to 4 digits** (e.g. `v2026.06.12.0045`).
-  Monotonic and collision-free without any stored state. Padding is required because GitHub's
-  Releases page orders entries by string comparison of tag names — with fixed-width components,
-  string order equals chronological order, keeping the newest release on top. (Verified
-  empirically on 2026-06-12: unpadded `v2026.06.12.13` sorted below `v2026.06.12.9`.)
+  the `release.yml` workflow run number **zero-padded to 4 digits**; the tag is
+  `<app>-v<YYYY.MM.DD>.<run_number>`. Padding is required because GitHub's Releases page orders
+  entries by string comparison of tag names — with fixed-width components, string order equals
+  chronological order. (Verified empirically on 2026-06-12: unpadded `v2026.06.12.13` sorted
+  below `v2026.06.12.9`.) The run number is global to the workflow, so per-app numbers may have
+  gaps but are always strictly increasing per app.
 - **Staging:** same scheme with a `-staging` suffix; **no tag is created**.
 - **Development:** `v<YYYY.MM.DD>.<ci_run_number>-dev+<short SHA>` (run number padded the same
   way); **no tag is created**.
@@ -133,31 +141,33 @@ Given a ZIP path and an expected environment, it must:
 - A re-run of a release workflow attempt keeps the same run number; if the tag already exists the
   workflow must **fail with a clear error** rather than overwrite anything (intentional idempotency
   guard — re-releasing the same version requires a fresh run).
-- **Monotonic version guard** (build job, both environments): the computed version must sort
-  strictly above the newest existing `v*` tag, otherwise the run fails. This closes the same-day
-  stale re-run loophole: run numbers are frozen per run, so re-running an old failed run after
-  newer releases shipped would otherwise produce a *lower* version — for production it would even
-  be marked Latest. Caveat: re-runs execute their original workflow snapshot, so the guard only
-  protects runs created after it was introduced (2026-06-12).
+- **Monotonic version guard** (build job, both environments): the computed `<app>-<version>` must
+  sort strictly above that **app's** newest existing tag, otherwise the run fails. This closes the
+  same-day stale re-run loophole: run numbers are frozen per run, so re-running an old failed run
+  after newer releases shipped would otherwise produce a *lower* version. Caveat: re-runs execute
+  their original workflow snapshot, so the guard only protects runs created after it was introduced.
 
 ## 6. Branching & release strategy
 
 ```
 feature/* ──PR (review + green CI required)──> main
                                                 │
-   every merge to main          ──> ci.yml      → development ZIP (Actions artifact, short retention)
-   manual dispatch (staging)    ──> release.yml → staging ZIP     (Actions artifact, 30-day retention)
-   manual dispatch (production) ──> release.yml → tag v<date>.<run> + GitHub Release with ZIP + sha256
-        └─ gated by the `production` environment: required reviewers, no self-review
+   every merge to main          ──> ci.yml      → dev ZIP for each CHANGED app (Actions artifact)
+   manual dispatch (app,staging) ─> release.yml → <app> staging ZIP (Actions artifact, 30-day)
+   manual dispatch (app,prod)    ─> release.yml → tag <app>-v<date>.<run> + GitHub Release
+        └─ gated by the `<app>-production` environment: required reviewers, no self-review
 
-hotfix lane — production needs a fix while main carries unreleased features:
+hotfix lane — an app's production needs a fix while main carries unreleased features:
 
-v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one review, CI runs as usual)
+<app>-v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one review, CI runs)
                                   │
-                                  ├─ optional: dispatch release.yml (staging) to rehearse the fix
-                                  ├─ dispatch release.yml (production) → tag + GitHub Release
+                                  ├─ optional: dispatch release.yml (app, staging) to rehearse
+                                  ├─ dispatch release.yml (app, production) → tag + GitHub Release
                                   └─ merge the same, already-approved PR into main (forward merge)
 ```
+
+- Each release run targets exactly one app and one environment; the two apps release on
+  independent tracks (separate tags, artifacts, environments, and badges).
 
 - All changes reach `main` exclusively through pull requests (squash-merge only); direct pushes
   are blocked.
@@ -181,34 +191,36 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
 
 ## 7. Workflows
 
-### 7.1 `ci.yml` — continuous integration (development environment)
+### 7.1 `ci.yml` — continuous integration (development environment), path-filtered per app
 
 - **Triggers:** `pull_request` targeting `main`, and `push` to `main`.
 - **Permissions:** `contents: read` (top level).
 - **Concurrency:** group per ref, `cancel-in-progress: true` (superseded runs are cancelled).
 - **Jobs:**
-  1. `build` — checkout, compute the dev version, run `scripts/build.sh` with
-     `ENVIRONMENT=development`, upload `dist/` as an Actions artifact (retention ~7 days).
-  2. `test` — `needs: build`; **downloads the built artifact** (does not rebuild) and runs
-     `scripts/verify.sh` against it expecting `development`. Testing the actual artifact, not a
-     rebuild, is deliberate.
-- The combination of `build` + `test` is the required status check for merging PRs.
+  1. `changes` — diffs against the base/before SHA and outputs a JSON list of affected apps:
+     `apps/<app>/**` → that app; shared `scripts/**` or `.github/workflows/**` → both; docs-only
+     → none. Falls back to "both" when the base is missing (new branch, shallow clone).
+  2. `build` (matrix over the changed apps, skipped when none) — compute the dev version, run
+     `scripts/build.sh APP=<app> ENVIRONMENT=development`, upload `<app>-…` as an Actions artifact.
+  3. `test` (matrix, `needs: build`) — **downloads the built artifact** (not a rebuild) and runs
+     `scripts/verify.sh` expecting `development` and that app.
+  4. `ci` — **the single required status check.** Always runs (`if: always()`), passes when
+     build/test succeeded *or were skipped* (no app changed → still green), fails on any
+     failure/cancel. This avoids the classic path-filter deadlock where a required matrix check
+     never reports and blocks the PR.
 
-### 7.2 `release.yml` — gated promotion (staging / production)
+### 7.2 `release.yml` — gated promotion (one app → staging / production)
 
-- **Trigger:** `workflow_dispatch` with one input: `environment` (choice: `staging`,
-  `production`). No free-text inputs — nothing for a human to mistype.
-- **Guard job:** asserts the workflow was dispatched from `main` or a `hotfix/*` branch
-  (`github.ref` equals `refs/heads/main` or matches `refs/heads/hotfix/*`); fails immediately
-  otherwise.
-- **Permissions:** top-level `contents: read`; only the publish step's job gets
-  `contents: write` (needed to create the tag and release).
-- **Concurrency:** group `release-<environment>`, no cancel-in-progress (a running production
-  release is never killed mid-publish; a second dispatch queues).
-- **Build/test jobs:** set `environment: ${{ inputs.environment }}` on the job so GitHub's
-  environment protection rules apply automatically (this is the human-error gate: production
-  requires reviewer approval, staging does not). Compute the version per §5, build, then verify
-  with `scripts/verify.sh`.
+- **Trigger:** `workflow_dispatch` with two choice inputs: `app` (`desktop`, `browser`) and
+  `environment` (`staging`, `production`). No free-text inputs — nothing for a human to mistype.
+- **Guard job:** asserts the workflow was dispatched from `main` or a `hotfix/*` branch; fails
+  immediately otherwise.
+- **Permissions:** top-level `contents: read`; only the publish/badge jobs get `contents: write`.
+- **Concurrency:** group `release-<app>-<environment>`, no cancel-in-progress — same app+env is
+  serialized; different apps (and environments) run concurrently, so the apps stay independent.
+- **Build/test jobs:** set `environment: <app>-<environment>` on the build job so the per-app
+  GitHub environment protection applies automatically (production envs gate on reviewer approval,
+  staging don't). Compute the version per §5, build with `APP=<app>`, verify with `verify.sh`.
 - **Staging path:** upload the verified ZIP + checksum as an Actions artifact with 30-day
   retention. Done — no tag, no release.
 - **Failure simulation:** repository variables following the `SIM_FAIL_<STAGE>` naming convention
@@ -219,21 +231,22 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   upload step itself fails; `dist/` is untouched). The guard job refuses production dispatches
   while any simulation variable is enabled.
 - **Badge job** (runs for both environments, also on failure): renders self-hosted SVG badges via
-  `scripts/badge.sh` (environment status; latest-release version on successful production) and
-  force-updates the `badges` **tag** (parentless commits, lease-protected retry against
-  staging/production races). The README serves them from raw.githubusercontent.com — replacing
-  shields.io's GitHub integrations, which intermittently fail with "Unable to select next GitHub
-  token from pool". A tag rather than a branch so badge pushes never trigger GitHub's "had recent
-  pushes" banner; not matched by the `v*` tag ruleset. Cancelled runs, and runs where no version
-  was computed (production deployment rejected at the approval gate, or aborted before the build),
-  leave badges unchanged — a declined or unattempted release must not flip the status to failing,
-  since the previously published version is still live.
+  `scripts/badge.sh`, **per app** — files `<app>-<env>.svg` and `<app>-latest-release.svg` — and
+  overlays only this app's SVGs onto the `badges` **tag** (parentless commits, lease-protected
+  retry against races), preserving the other app's badges. The README serves them from
+  raw.githubusercontent.com — replacing shields.io's GitHub integrations, which intermittently
+  fail with "Unable to select next GitHub token from pool". A tag rather than a branch so badge
+  pushes never trigger GitHub's "had recent pushes" banner; not matched by the `<app>-v*` tag
+  ruleset. Cancelled runs, and runs where no version was computed (production deployment rejected
+  at the approval gate, or aborted before the build), leave badges unchanged — a declined or
+  unattempted release must not flip the status to failing, since the previously published version
+  is still live.
 - **Production path:**
-  1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
-     most recent production tag is not an ancestor of the commit being released — a prior hotfix
-     shipped but was never merged forward and would regress. Squash-aware: a tag whose commit
-     belongs to a PR merged into `main` passes. Skipped for `hotfix/*` dispatches.
-  2. **Draft-first publish:** create a *draft* GitHub Release for `v<YYYY.MM.DD>.<run_number>`
+  1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if this
+     **app's** most recent production tag (`<app>-v*`) is not an ancestor of the commit being
+     released — a prior hotfix shipped but was never merged forward and would regress. Squash-aware:
+     a tag whose commit belongs to a PR merged into `main` passes. Skipped for `hotfix/*` dispatches.
+  2. **Draft-first publish:** create a *draft* GitHub Release for `<app>-v<YYYY.MM.DD>.<run_number>`
      (auto-generated notes) and upload the ZIP + `.sha256` to it. Drafts create no tag and are
      not public, so a failed asset upload leaves nothing half-released; a failure handler deletes
      the leftover draft automatically. The draft's **release id is captured from the create
@@ -251,11 +264,12 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
 
 ### 7.3 `tag-police.yml` — tag-name enforcement
 
-- **Trigger:** `push` of any `v*` tag.
-- Well-formed release tags (`^v[0-9]{4}[.][0-9]{2}[.][0-9]{2}[.][0-9]{4}$`) pass; anything else
-  is **deleted immediately** via the API and the run fails with a clear error pointing at the
-  release guide. Works because the tag ruleset's include pattern only covers well-formed names
-  (§8 item 4), leaving malformed look-alikes deletable.
+- **Trigger:** `push` of any `desktop-v*`, `browser-v*`, or bare `v*` tag.
+- Well-formed release tags (`^(desktop|browser)-v[0-9]{4}[.][0-9]{2}[.][0-9]{2}[.][0-9]{4}$`)
+  pass; anything else (including now-obsolete bare `v*`) is **deleted immediately** via the API
+  and the run fails with a clear error pointing at the release guide. Works because the tag
+  ruleset's include patterns only cover well-formed app names (§8 item 4), leaving malformed
+  look-alikes deletable.
 - Release-workflow tags trigger a (green) validation run — a free extra confirmation per release.
 
 ## 8. Repository setup & protections (automated by `scripts/setup-github.sh`)
@@ -282,11 +296,12 @@ Actions settings.
   2. Set `main` as the default branch; enable delete-branch-on-merge.
   3. Configure merge methods per item 3 below.
   4. Create/update the branch ruleset (item 2) and the tag ruleset (item 4) via the rulesets API.
-  5. Create/update the `staging` and `production` environments (item 5), resolving approver
-     usernames to user IDs; enable prevent-self-review on `production`. If the only approver is
-     the authenticated user, warn that self-dispatched production releases will block. With
-     `--no-approval`, configure `production` with no required reviewers instead and warn loudly
-     that releases will publish without human approval.
+  5. Create/update the **four per-app environments** (`desktop-staging`, `desktop-production`,
+     `browser-staging`, `browser-production`; remove the pre-monorepo shared `staging`/`production`
+     if present), resolving approver usernames to user IDs; enable prevent-self-review on the
+     `*-production` envs. If the only approver is the authenticated user, warn that self-dispatched
+     production releases will block. With `--no-approval`, configure the production envs with no
+     required reviewers and warn loudly that releases will publish without human approval.
   6. Apply the Actions defaults (item 7) via the Actions permissions API.
   7. Seed the `badges` tag with placeholder SVGs if missing — the release workflow's badge job
      force-updates it on every run (a tag, not a branch, so GitHub never shows a "had recent
@@ -296,30 +311,33 @@ Actions settings.
 ### Target configuration the script must apply
 
 1. **Default branch** `main`.
-2. **Branch ruleset on `main`:** require PR before merging, ≥1 approval, required status checks
-   (`build`, `test`) passing, block force pushes and deletion, require linear history. Do **not**
+2. **Branch ruleset on `main`:** require PR before merging, ≥1 approval, the required status check
+   `ci` passing (the single always-reporting gate from §7.1), block force pushes and deletion,
+   require linear history. Do **not**
    require branches to be up to date before merging: with five developers on one trunk it forces
    constant rebase-and-rerun churn, and post-merge CI on `main` catches the rare semantic
    conflict. If the repo's plan supports merge queue, enable it and re-enable strict up-to-date.
 3. **Merge methods:** allow **squash-merge only** (disable merge commits and rebase merges).
    Linear history makes rolling back a whole feature a single `git revert`.
-4. **Tag ruleset on `v*`:** preferred configuration blocks creation, update, and deletion for
-   everyone, with a bypass for the GitHub Actions app so only the release workflow can create
+4. **Tag ruleset on `<app>-v*`:** preferred configuration blocks creation, update, and deletion
+   for everyone, with a bypass for the GitHub Actions app so only the release workflow can create
    tags. **Verified during implementation:** that bypass actor is only accepted on org-owned
    repos; on a personal repo the script automatically falls back to blocking update/deletion only
    (released tags are immutable, creation stays open). The publish job independently refuses to
    reuse an existing tag, so a stray manual tag fails the release loudly rather than being
    overwritten. Re-running the script after moving the repo to an organization converges to the
    full lockdown. **Name validation:** ruleset-level `tag_name_pattern` rules require GitHub
-   Enterprise (rejected with HTTP 422 here), so instead the ruleset's include pattern matches
-   exactly the well-formed shape via fnmatch classes (`refs/tags/v[0-9][0-9][0-9][0-9].[0-9][0-9]
-   .[0-9][0-9].[0-9][0-9][0-9][0-9]`) — only real release tags are immutable — and the
-   `tag-police` workflow (§7.3) auto-deletes malformed `v*` look-alikes (e.g. `v2026.05.1111`)
-   the moment they are pushed.
-5. **Environments:** create `staging` and `production`. `production` gets **required reviewers**
-   (name at least two eligible approvers to cover absences, and enable **"prevent self-review"**
-   so the person dispatching a release can never approve it themselves) and deployment-branch
-   restriction to `main` + `hotfix/*`. `staging` gets the same branch restriction only.
+   Enterprise (rejected with HTTP 422 here), so instead the ruleset's include patterns match
+   exactly the well-formed per-app shapes via fnmatch classes
+   (`refs/tags/desktop-v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]` and the
+   `browser-` equivalent) — only real release tags are immutable — and the `tag-police` workflow
+   (§7.3) auto-deletes malformed look-alikes the moment they are pushed.
+5. **Environments:** create four — `desktop-staging`, `desktop-production`, `browser-staging`,
+   `browser-production`. Each `*-production` gets **required reviewers** (name at least two
+   eligible approvers to cover absences, and enable **"prevent self-review"** so the person
+   dispatching a release can never approve it themselves) and deployment-branch restriction to
+   `main` + `hotfix/*`. Each `*-staging` gets the same branch restriction only. The pre-monorepo
+   shared `staging`/`production` environments are removed.
 6. **CODEOWNERS:** route `.github/workflows/` and `scripts/` to designated reviewer(s) — pipeline
    changes are the highest-blast-radius changes in the repo.
 7. **Actions settings:** default workflow permissions = read-only; "Allow GitHub Actions to create

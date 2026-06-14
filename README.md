@@ -1,19 +1,37 @@
 # PoC Release Pipeline
 
 [![CI](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/ci.yml?query=branch%3Amain)
-[![Staging](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/staging.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
-[![Production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
-[![Latest release](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases/latest)
 
-<sub>↑ &nbsp;**CI** – development build health on `main` &nbsp;·&nbsp; **staging** / **production** – outcome of each environment's most recent completed release &nbsp;·&nbsp; **latest release** – newest published version. Self-hosted badges rendered by the release workflow (`badges` tag); allow a few minutes of caching after a release.</sub>
+**desktop** &nbsp;
+[![desktop staging](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/desktop-staging.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![desktop production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/desktop-production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![desktop latest](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/desktop-latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases)
+
+**browser** &nbsp;
+[![browser staging](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/browser-staging.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![browser production](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/browser-production.svg)](https://github.com/andrmarin/poc_release_pipeline/actions/workflows/release.yml)
+[![browser latest](https://raw.githubusercontent.com/andrmarin/poc_release_pipeline/badges/browser-latest-release.svg)](https://github.com/andrmarin/poc_release_pipeline/releases)
+
+<sub>↑ &nbsp;**CI** – development build health on `main` &nbsp;·&nbsp; per-app **staging** / **production** – outcome of each app+environment's most recent completed release &nbsp;·&nbsp; **latest** – that app's newest published version. Self-hosted badges rendered by the release workflow (`badges` tag); allow a few minutes of caching after a release.</sub>
 
 ## What is this?
 
-A proof-of-concept CI/CD pipeline built with GitHub Actions, used as a dry run for a
-future desktop application. The "application" itself is deliberately tiny — a ZIP of
-text files — because **the pipeline is the deliverable**, not the app. The pipeline
-builds the ZIP, tests it, and releases it through three environments:
-**development → staging → production**.
+A proof-of-concept CI/CD pipeline built with GitHub Actions, structured as a **monorepo
+with two apps** — `apps/desktop` and `apps/browser` — that **release independently**.
+Each app is deliberately tiny (a ZIP of text files) because **the pipeline is the
+deliverable**, not the apps. For each app the pipeline builds a ZIP, tests it, and
+releases it through three environments: **development → staging → production**.
+
+```
+apps/
+  desktop/   # sample payload for the desktop app
+  browser/   # sample payload for the browser app
+scripts/     # build.sh, verify.sh, badge.sh, setup-github.sh (all app-aware)
+.github/workflows/   # ci.yml, release.yml, tag-police.yml
+```
+
+The two apps version and release on their own tracks: a desktop release never touches
+browser, and vice versa.
 
 Good starting points:
 
@@ -59,18 +77,24 @@ gh auth status   # should say: Logged in to github.com
 | staging | you trigger it manually (`release.yml`) | build artifact in the Actions run, kept 30 days |
 | production | you trigger it manually + a reviewer approves (`release.yml`) | Git tag + [GitHub Release](https://github.com/andrmarin/poc_release_pipeline/releases) with the ZIP and its `.sha256` checksum |
 
-Every ZIP contains the files from `src/` plus a generated `build.info` stating the
+CI builds only the app(s) a PR actually changed (changing shared `scripts/` or workflows
+builds both). Release runs take an **app** input, so you release `desktop` or `browser`
+on demand, independently.
+
+Every ZIP contains that app's files plus a generated `build.info` stating the app,
 environment, build timestamp (UTC), version, commit, and a link to the CI run that built
 it — so any ZIP can be traced back to its exact source.
 
-Versions are **computed, never typed by hand**: `v<YYYY.MM.DD>.<run_number>` with the
-run number zero-padded to 4 digits, e.g. `v2026.06.12.0045`. Staging builds get a
-`-staging` suffix; development builds get `-dev+<commit>`.
+Versions are **computed, never typed by hand**: tags are `<app>-v<YYYY.MM.DD>.<run_number>`
+with the run number zero-padded to 4 digits, e.g. `desktop-v2026.06.14.0045`. Artifacts are
+named the same (`desktop-v2026.06.14.0045-production.zip`). Staging builds get a `-staging`
+suffix; development builds get `-dev+<commit>`.
 
 ## Everyday development
 
 1. Branch from `main`, make your change, push, and open a pull request.
-2. CI runs automatically (`build` + `test` must be green) and one teammate must approve.
+2. CI runs automatically (the `ci` check must be green — it builds/tests whichever app you
+   changed) and one teammate must approve.
 3. **Squash-merge** the PR (the only merge method enabled). Done — CI builds the
    development artifact from `main` automatically.
 
@@ -88,7 +112,7 @@ slow you down:
 | Pull request required | direct pushes to `main` are rejected, for everyone | every change gets CI and a second pair of eyes before it can ship |
 | 1 approving review | a PR needs a teammate's approval (you cannot approve your own) | review is evidence, not ceremony — someone else looked |
 | Code-owner review | changes under `.github/` and `scripts/` need approval from [CODEOWNERS](.github/CODEOWNERS) | pipeline changes have the highest blast radius in the repo |
-| Required checks: `build`, `test` | a PR cannot merge while CI is red | `main` stays releasable at every commit |
+| Required check: `ci` | a PR cannot merge while CI is red — one gate job that always reports, even when only one app (or no app) changed | `main` stays releasable at every commit without path-filtered checks deadlocking |
 | Squash-merge only + linear history | each PR lands as exactly one commit, no merge commits | rolling back a whole feature is a single `git revert`; history reads like a changelog |
 | No force-pushes | history on `main` is append-only | released tags and `build.info` commit references can never point at rewritten history |
 | No branch deletion | `main` cannot be deleted | even by accident, even by admins |
@@ -97,11 +121,11 @@ slow you down:
 Two related protections outside the branch ruleset:
 
 - **`protect-release-tags` ruleset + tag police:** well-formed release tags
-  (`vYYYY.MM.DD.NNNN`) are immutable (no update, no deletion) — a published version number
-  must point at the same commit forever. Malformed `v*` look-alikes (e.g. `v2026.05.1111`)
-  are **auto-deleted within seconds** by the `tag-police` workflow (ruleset-level name
-  regexes need GitHub Enterprise). On org-owned repos tag *creation* is also restricted to
-  the release workflow.
+  (`<app>-vYYYY.MM.DD.NNNN`) are immutable (no update, no deletion) — a published version
+  number must point at the same commit forever. Malformed look-alikes (e.g. `v2026.05.1111`
+  or `desktop-v1`) are **auto-deleted within seconds** by the `tag-police` workflow
+  (ruleset-level name regexes need GitHub Enterprise). On org-owned repos tag *creation* is
+  also restricted to the release workflow.
 - **Auto-delete merged branches:** the remote feature branch is removed on merge, so
   stale branches don't accumulate (note: this is why a hotfix must be *released before*
   its PR is merged).
@@ -127,7 +151,7 @@ git push -u origin feat/my-change
 
 # 4. Open a pull request and wait for CI
 gh pr create --fill        # title/body from your commit message
-gh pr checks --watch       # waits until the build + test checks finish
+gh pr checks --watch       # waits until the 'ci' gate (changed-app build/test) finishes
 
 # 5. Merge after a teammate approves (squash is the only allowed method;
 #    the remote branch is deleted automatically)
@@ -138,20 +162,21 @@ gh pr merge --squash --delete-branch
 git switch main
 git pull origin main
 
-# 7. (Optional) Release to staging (no approval needed) and watch it
-gh workflow run release.yml --ref main -f environment=staging
+# 7. (Optional) Release the changed app to staging (no approval) and watch it.
+#    Pick the app: desktop or browser.
+gh workflow run release.yml --ref main -f app=desktop -f environment=staging
 sleep 10 && gh run watch "$(gh run list --workflow=release.yml --limit 1 \
   --json databaseId --jq '.[0].databaseId')"
 
-# 8. Release to production — the run PAUSES for reviewer approval:
+# 8. Release that app to production — the run PAUSES for reviewer approval:
 #    an approver opens the run page → "Review deployments" → Approve and deploy
 #    (click path with screenshots: docs/HOW_TO_RELEASE.md)
-gh workflow run release.yml --ref main -f environment=production
+gh workflow run release.yml --ref main -f app=desktop -f environment=production
 sleep 10 && gh run watch "$(gh run list --workflow=release.yml --limit 1 \
   --json databaseId --jq '.[0].databaseId')"
 
-# 9. See the published release (tag, ZIP + .sha256, marked Latest)
-gh release view --web
+# 9. See the published release (tag desktop-v..., ZIP + .sha256)
+gh release view "desktop-$(date -u +%Y.%m.%d)"* --web 2>/dev/null || gh release list
 ```
 
 ## Releasing
@@ -160,24 +185,26 @@ Short version — full click-by-click guide with screenshots in
 [docs/HOW_TO_RELEASE.md](docs/HOW_TO_RELEASE.md):
 
 ```sh
-gh workflow run release.yml --ref main -f environment=staging      # staging
-gh workflow run release.yml --ref main -f environment=production   # production (needs approval)
+gh workflow run release.yml --ref main -f app=desktop -f environment=staging     # staging
+gh workflow run release.yml --ref main -f app=browser -f environment=production  # production (needs approval)
 ```
 
-Production releases pause until a reviewer approves, then publish fully automatically
-(draft release → asset verification → publish → post-publish verify). Hotfixes branch
-from the **last production tag**, not from `main` — see the guide.
+Each release targets one app (`desktop` or `browser`) and one environment. Production
+releases pause until a reviewer approves, then publish fully automatically (draft release →
+asset verification → publish → post-publish verify). Hotfixes branch from that app's **last
+production tag** (e.g. `desktop-v…`), not from `main` — see the guide.
 
 ## Building and testing locally
 
 You can run the same build and verification the pipeline runs, on your own machine:
 
 ```sh
-ENVIRONMENT=development scripts/build.sh   # creates dist/sample-app-...zip + .sha256
-scripts/verify.sh dist/*.zip development   # checks checksum, contents, build.info, behavior
+APP=desktop ENVIRONMENT=development scripts/build.sh   # creates dist/desktop-...zip + .sha256
+scripts/verify.sh dist/*.zip development desktop       # checksum, contents, build.info, behavior
 ```
 
-Needs bash, `sha256sum`, and either `zip`/`unzip` or Python.
+`APP` defaults to `desktop`; set `APP=browser` to build the other app. Needs bash,
+`sha256sum`, and either `zip`/`unzip` or Python.
 
 ## Simulating failures (negative-path drills)
 
@@ -212,11 +239,12 @@ scripts/setup-github.sh --approvers user1,user2
 ```
 
 Creates the public repo (if missing), pushes `main`, and converges: squash-only merges,
-branch ruleset (PR + approval + codeowner review + `build`/`test` checks, no force-push),
-tag ruleset (released `v*` tags immutable; on org-owned repos creation is also restricted
-to the release workflow), `staging`/`production` environments (deployments from `main` +
-`hotfix/*`, production approvers with prevent-self-review), and read-only default Actions
-permissions. Idempotent — re-run anytime.
+branch ruleset (PR + approval + codeowner review + the `ci` check, no force-push), tag
+ruleset (released `<app>-v*` tags immutable; on org-owned repos creation is also restricted
+to the release workflow), **four per-app environments** (`desktop-staging`,
+`desktop-production`, `browser-staging`, `browser-production` — deployments from `main` +
+`hotfix/*`, production envs gated by approvers with prevent-self-review), and read-only
+default Actions permissions. Idempotent — re-run anytime.
 
 Solo testing: `--allow-self-review` lets you approve your own production releases, and
 `--no-approval` removes the production approval gate entirely (releases publish without

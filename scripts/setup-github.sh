@@ -130,24 +130,24 @@ apply_ruleset "protect-main" '{
     { "type": "required_status_checks", "parameters": {
         "strict_required_status_checks_policy": false,
         "required_status_checks": [
-          { "context": "build" },
-          { "context": "test" } ] } }
+          { "context": "ci" } ] } }
   ]
 }'
 
 # Preferred: only the GitHub Actions app (Integration id 15368) may create
-# v* tags — i.e. the release workflow; humans, including admins, are blocked.
-# That bypass actor is only valid on ORG-owned repos. On personal repos, fall
-# back to immutability only (no update/delete of released tags; creation stays
-# open) — the release workflow still refuses to reuse an existing tag, so a
-# stray manual tag fails the release loudly instead of being overwritten.
+# release tags — i.e. the release workflow; humans, including admins, are
+# blocked. That bypass actor is only valid on ORG-owned repos. On personal
+# repos, fall back to immutability only (no update/delete of released tags;
+# creation stays open) — the release workflow still refuses to reuse an
+# existing tag, so a stray manual tag fails the release loudly.
 #
-# The include pattern matches EXACTLY the well-formed release shape
-# (vYYYY.MM.DD.NNNN, fnmatch classes): well-formed tags are immutable, while
-# malformed v* look-alikes fall outside the ruleset so the tag-police
+# The include patterns match EXACTLY the well-formed per-app release shapes
+# (<app>-vYYYY.MM.DD.NNNN, fnmatch classes): well-formed tags are immutable,
+# while malformed look-alikes fall outside the ruleset so the tag-police
 # workflow can auto-delete them on push. (Ruleset-level name validation via
 # tag_name_pattern requires GitHub Enterprise — rejected with HTTP 422 here.)
-tag_include='refs/tags/v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]'
+tag_inc_d='refs/tags/desktop-v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]'
+tag_inc_b='refs/tags/browser-v[0-9][0-9][0-9][0-9].[0-9][0-9].[0-9][0-9].[0-9][0-9][0-9][0-9]'
 tag_ruleset_full='{
   "name": "protect-release-tags",
   "target": "tag",
@@ -155,7 +155,7 @@ tag_ruleset_full='{
   "bypass_actors": [
     { "actor_id": 15368, "actor_type": "Integration", "bypass_mode": "always" }
   ],
-  "conditions": { "ref_name": { "include": ["'"$tag_include"'"], "exclude": [] } },
+  "conditions": { "ref_name": { "include": ["'"$tag_inc_d"'", "'"$tag_inc_b"'"], "exclude": [] } },
   "rules": [
     { "type": "creation" },
     { "type": "update" },
@@ -167,7 +167,7 @@ tag_ruleset_fallback='{
   "target": "tag",
   "enforcement": "active",
   "bypass_actors": [],
-  "conditions": { "ref_name": { "include": ["'"$tag_include"'"], "exclude": [] } },
+  "conditions": { "ref_name": { "include": ["'"$tag_inc_d"'", "'"$tag_inc_b"'"], "exclude": [] } },
   "rules": [
     { "type": "update" },
     { "type": "deletion" }
@@ -178,7 +178,7 @@ if apply_ruleset "protect-release-tags" "$tag_ruleset_full" 2>/dev/null; then
 else
   warn "GitHub Actions app cannot be a bypass actor on a user-owned repo;"
   warn "applying fallback tag ruleset: well-formed release tags are immutable,"
-  warn "creation stays open (malformed v* tags are auto-deleted by the"
+  warn "creation stays open (malformed <app>-v* tags are auto-deleted by the"
   warn "tag-police workflow). Re-run after moving the repo to an organization"
   warn "to get full tag lockdown."
   apply_ruleset "protect-release-tags" "$tag_ruleset_fallback"
@@ -196,15 +196,9 @@ ensure_branch_policy() {
   fi
 }
 
-info "Configuring environment 'staging'"
-gh api -X PUT "repos/$full/environments/staging" --input - <<'JSON' >/dev/null
-{ "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true } }
-JSON
-ensure_branch_policy staging "main"
-ensure_branch_policy staging "hotfix/*"
-
+# Per-app environments: <app>-staging (no gate) and <app>-production (gate).
+# Resolve the production approver list once, shared across both apps.
 if [[ "$REQUIRE_APPROVAL" == "true" ]]; then
-  info "Configuring environment 'production' (approvers: $APPROVERS)"
   reviewers=""
   for u in ${APPROVERS//,/ }; do
     id="$(gh api "users/$u" --jq .id)" || die "cannot resolve GitHub user '$u'"
@@ -213,21 +207,38 @@ if [[ "$REQUIRE_APPROVAL" == "true" ]]; then
   reviewers_json="[${reviewers%,}]"
   prod_gate="required reviewers ($APPROVERS), prevent_self_review=$PREVENT_SELF_REVIEW"
 else
-  info "Configuring environment 'production' (NO approval gate — --no-approval)"
   reviewers_json="[]"
   PREVENT_SELF_REVIEW=false
   prod_gate="approval gate DISABLED (--no-approval)"
 fi
 
-gh api -X PUT "repos/$full/environments/production" --input - <<JSON >/dev/null
+# Remove the pre-monorepo shared environments if they linger.
+for old in staging production; do
+  if gh api "repos/$full/environments/$old" >/dev/null 2>&1; then
+    info "Removing obsolete shared environment '$old'"
+    gh api -X DELETE "repos/$full/environments/$old" >/dev/null
+  fi
+done
+
+for app in desktop browser; do
+  info "Configuring environment '${app}-staging'"
+  gh api -X PUT "repos/$full/environments/${app}-staging" --input - <<'JSON' >/dev/null
+{ "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true } }
+JSON
+  ensure_branch_policy "${app}-staging" "main"
+  ensure_branch_policy "${app}-staging" "hotfix/*"
+
+  info "Configuring environment '${app}-production' ($prod_gate)"
+  gh api -X PUT "repos/$full/environments/${app}-production" --input - <<JSON >/dev/null
 {
   "prevent_self_review": $PREVENT_SELF_REVIEW,
   "reviewers": $reviewers_json,
   "deployment_branch_policy": { "protected_branches": false, "custom_branch_policies": true }
 }
 JSON
-ensure_branch_policy production "main"
-ensure_branch_policy production "hotfix/*"
+  ensure_branch_policy "${app}-production" "main"
+  ensure_branch_policy "${app}-production" "hotfix/*"
+done
 
 if [[ "$REQUIRE_APPROVAL" == "false" ]]; then
   warn "Production releases will publish WITHOUT any human approval."
@@ -257,11 +268,14 @@ if git ls-remote --exit-code origin refs/tags/badges >/dev/null 2>&1; then
 else
   info "Seeding 'badges' tag with placeholder badges"
   tmp="$(mktemp -d)"
-  bash scripts/badge.sh staging unknown "#9f9f9f" > "$tmp/staging.svg"
-  bash scripts/badge.sh production unknown "#9f9f9f" > "$tmp/production.svg"
-  bash scripts/badge.sh "latest release" none "#9f9f9f" > "$tmp/latest-release.svg"
+  for app in desktop browser; do
+    bash scripts/badge.sh "$app staging"   unknown "#9f9f9f" > "$tmp/${app}-staging.svg"
+    bash scripts/badge.sh "$app production" unknown "#9f9f9f" > "$tmp/${app}-production.svg"
+    bash scripts/badge.sh "$app latest"    none    "#9f9f9f" > "$tmp/${app}-latest-release.svg"
+  done
   tree="$(
-    for f in staging production latest-release; do
+    for f in desktop-staging desktop-production desktop-latest-release \
+             browser-staging browser-production browser-latest-release; do
       printf '100644 blob %s\t%s.svg\n' "$(git hash-object -w "$tmp/$f.svg")" "$f"
     done | git mktree
   )"
@@ -275,13 +289,12 @@ cat <<EOF
 
 Bootstrap complete for https://github.com/$full
   - default branch 'main' pushed; squash-merge only; delete-branch-on-merge
-  - ruleset 'protect-main': PR + 1 approval + codeowner review + checks
-    (build, test); no force-push/deletion; linear history;
+  - ruleset 'protect-main': PR + 1 approval + codeowner review + 'ci' check;
+    no force-push/deletion; linear history;
     admin bypass via PR only (remove once team is onboarded)
   - ruleset 'protect-release-tags': $tag_protection
-  - environment 'staging': deployments from main + hotfix/*
-  - environment 'production': $prod_gate,
-    deployments from main + hotfix/*
+  - environments: {desktop,browser}-staging (no gate) and
+    {desktop,browser}-production ($prod_gate); deployments from main + hotfix/*
   - Actions: read-only default token, cannot approve PRs
 
 Re-running this script converges everything back to this state.
