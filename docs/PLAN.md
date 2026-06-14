@@ -224,7 +224,10 @@ v<last prod tag> ──branch──> hotfix/<issue> ──PR into main (the one 
   staging/production races). The README serves them from raw.githubusercontent.com — replacing
   shields.io's GitHub integrations, which intermittently fail with "Unable to select next GitHub
   token from pool". A tag rather than a branch so badge pushes never trigger GitHub's "had recent
-  pushes" banner; not matched by the `v*` tag ruleset. Cancelled runs leave badges unchanged.
+  pushes" banner; not matched by the `v*` tag ruleset. Cancelled runs, and runs where no version
+  was computed (production deployment rejected at the approval gate, or aborted before the build),
+  leave badges unchanged — a declined or unattempted release must not flip the status to failing,
+  since the previously published version is still live.
 - **Production path:**
   1. **Unmerged-hotfix guard** (regular releases only, i.e. dispatched from `main`): fail if the
      most recent production tag is not an ancestor of the commit being released — a prior hotfix

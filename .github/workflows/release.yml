@@ -361,6 +361,15 @@ jobs:
           test_r="${{ needs.test.result }}"
           pub_r="${{ needs.publish.result }}"
           ppv_r="${{ needs['post-publish-verify'].result }}"
+          # A rejected production deployment (or any abort before the build
+          # actually started) leaves the version output empty — no release was
+          # attempted, so the previously published version is still the truth.
+          # Leave the badges untouched rather than flip the status to failing.
+          if [[ -z "$VERSION" ]]; then
+            echo "update=false" >> "$GITHUB_OUTPUT"
+            echo "No version computed — deployment rejected at the gate or aborted before build. Leaving badges unchanged."
+            exit 0
+          fi
           if [[ "$test_r" == "cancelled" || "$pub_r" == "cancelled" || "$ppv_r" == "cancelled" ]]; then
             echo "update=false" >> "$GITHUB_OUTPUT"
             echo "Run was cancelled — leaving badges unchanged."
