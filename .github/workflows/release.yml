@@ -234,7 +234,7 @@ jobs:
             if gh api -X POST "repos/$GITHUB_REPOSITORY/releases" \
                  -f tag_name="$TAG" \
                  -f target_commitish="$GITHUB_SHA" \
-                 -f name="$APP $VERSION" \
+                 -f name="${APP^} $VERSION" \
                  -F draft=true \
                  -F generate_release_notes=true \
                  --jq '.id' > release_id.txt; then
